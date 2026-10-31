@@ -1,14 +1,14 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=8">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=9">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v8</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v9</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
  <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div>
-  <div class="row"><button id="folderBtn" hidden>📂 Connect folder</button><button id="exportBtn">⬇️ Export database</button><button id="importBtn">⬆️ Import database</button><input id="importFile" type="file" accept=".json,application/json" hidden></div><div id="folderInfo" class="muted">Learning is kept in this browser. Connect a folder (Chrome/Edge) to also save it as files, or Export to move it to another device.</div></div>
+  <div class="row"><button id="folderBtn" hidden>📂 Connect folder</button><button id="exportBtn">⬇️ Export database</button><button id="importBtn">⬆️ Import database</button><button id="resetBtn" class="danger">🗑️ Reset database</button><input id="importFile" type="file" accept=".json,application/json" hidden></div><div id="folderInfo" class="muted">Learning is kept in this browser. Connect a folder (Chrome/Edge) to also save it as files, or Export to move it to another device.</div></div>
  <div class="card"><h2>Add / edit product</h2>
   <form id="itemForm"><input type="hidden" id="itemId">
    <div class="grid"><label>Name<input id="iname" required></label><label>Price (₹)<input id="iprice" type="number" step="0.01" min="0" required></label>
@@ -29,7 +29,7 @@
    <label class="chk"><input type="checkbox" id="showUnknown" checked> Show “Not in database” items</label>
    <label class="chk"><input type="checkbox" id="closer" checked> Closer look: extra zoomed views for uncertain items (full-resolution crops)</label>
    <label class="chk"><input type="checkbox" id="hiAcc"> High-recall detector (OWLv2, slower, +155 MB once)</label>
-   <label>Match threshold (min similarity): <b id="thrVal">0.55</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.55"></label>
+   <label>Match threshold (min similarity): <b id="thrVal">0.50</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.5"></label>
    <div class="muted" id="engineInfo"></div></details>
   <video id="cam" playsinline hidden></video>
   <p class="tip">📸 Best results: put items on a <b>plain light tray or sheet</b>, shoot <b>straight from above</b> in even light, and leave a small gap between items.</p>
@@ -45,4 +45,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js?v=8"></script></body></html>
+<script type="module" src="app.js?v=9"></script></body></html>

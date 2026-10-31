@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=8';
-const APP_VERSION='8',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=9';
+const APP_VERSION='9',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -52,6 +52,7 @@ $('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn'),info=$('#samplesIn
   let n=0,k=0;for(const m of man){k++;if(items.some(i=>i.name===m.name))continue;info.textContent=`Adding ${k}/${man.length}: ${m.name}…`;
    const pre=m.model===MODEL_TAG&&m.emb;const photos=await Promise.all(m.photos.map(async(u,j)=>({src:await toURL(u),kind:'crop',thumb:null,...(pre&&m.emb[j]?{emb:m.emb[j],model:MODEL_TAG}:{})})));photos.forEach(p=>p.thumb=p.src);
    await putItem({id:crypto.randomUUID(),name:m.name,price:m.price,category:m.category,unit:m.unit,notes:m.notes,photos});n++;await refresh()}
+  if(embs&&embs.negs&&embs.model===MODEL_TAG&&localStorage.getItem('vb_sampleNegs')!==embs.created){negs=[...negs,...embs.negs];await kvSet('negs',negs);localStorage.setItem('vb_sampleNegs',embs.created);rebuildBank();reclassifyScans()}
   info.textContent=n?`✔ Added ${n} sample products${man[0].emb?' with pre-learned embeddings (no relearning needed)':''}. ${man[0].emb?'':det?'Learning them now…':'They will be learned as soon as the AI models finish downloading.'}`:'✔ Sample products are already loaded.';
   queue(()=>trainAll())}catch(e){console.error(e);info.textContent='Could not load samples: '+e.message}finally{btn.disabled=false}};
 $('#trainBtn').onclick=()=>queue(()=>trainAll(true));
@@ -191,13 +192,24 @@ async function initFolder(){if(!hasFS)return updateFolderUI();const h=await kvGe
  const ok=async()=>{dir=h;await loadFromFolder();updateFolderUI()};
  if(await h.queryPermission({mode:'readwrite'})==='granted')return ok();
  $('#folderInfo').innerHTML='';const b=document.createElement('button');b.className='primary';b.textContent=`🔓 Reconnect folder “${h.name}”`;b.onclick=async()=>{if(await h.requestPermission({mode:'readwrite'})==='granted'){b.remove();await ok()}};$('#folderInfo').append(b);updateFolderUI()}
-$('#folderBtn').onclick=connectFolder;window.VB.useDir=async h=>{dir=h;await kvSet0('dirHandle',h);await saveToFolder();updateFolderUI()};
+$('#folderBtn').onclick=connectFolder;
+$('#resetBtn').onclick=async()=>{if(!confirm('⚠️ Reset database?\n\nThis permanently deletes ALL products, prices, training photos, learned embeddings, background examples, settings and the current bill from this browser.'))return;
+ if(!confirm('Are you sure? This cannot be undone (unless you exported a backup).'))return;
+ let clearFolder=false;if(dir)clearFolder=confirm(`A folder “${dir.name}” is connected. Also delete the saved database files in that folder?\n\nOK = delete them too · Cancel = keep the files and disconnect the folder`);
+ loadingSnap=true;clearTimeout(saveT);
+ try{if(dir&&clearFolder){for(const n of ['products.json','embeddings.json','settings.json'])await dir.removeEntry(n).catch(()=>{});await dir.removeEntry('photos',{recursive:true}).catch(()=>{})}
+  await req(tx('items','readwrite').clear());await req(tx('kv','readwrite').clear());dir=null;
+  Object.keys(localStorage).filter(k=>k.startsWith('vb_')).forEach(k=>localStorage.removeItem(k))}finally{loadingSnap=false}
+ items=[];negs=[];bill=[];scans=[];rebuildBank();renderScans();await refresh();updateFolderUI();$('#thr').value=0.5;$('#thrVal').textContent='0.50';
+ $('#folderInfo').textContent='🗑️ Database reset. Everything was cleared'+(clearFolder?' (including the folder files).':'.');$('#samplesInfo').innerHTML='';
+ const b=document.createElement('button');b.className='primary';b.textContent='📦 Load fresh sample set';b.onclick=()=>{b.remove();$('#samplesBtn').click()};$('#samplesInfo').append(b);
+ if(confirm('Database cleared. Load the fresh sample set now?')){b.remove();$('#samplesBtn').click()}};window.VB.useDir=async h=>{dir=h;await kvSet0('dirHandle',h);await saveToFolder();updateFolderUI()};
 $('#exportBtn').onclick=async()=>{const s=await snapshot();s.items.forEach(it=>it.photos.forEach(p=>{if(p.emb)p.emb=p.emb.map(v=>v.map(r4))}));s.negs=s.negs.map(v=>v.map(r4));
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(s)],{type:'application/json'}));a.download=`visionbill-db-${new Date().toISOString().slice(0,10)}.json`;document.body.append(a);a.click();a.remove()};
 $('#importBtn').onclick=()=>$('#importFile').click();
 $('#importFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const s=JSON.parse(await f.text());if(items.length&&!confirm(`Replace ${items.length} products in this browser with ${s.items.length} from the file?`))return;await applySnapshot(s);scheduleSave();$('#folderInfo').textContent=`✔ Imported ${s.items.length} products from ${f.name}`}catch(err){alert('Import failed: '+err.message)}};
 // ---------- init ----------
 (async()=>{await openDB();bill=JSON.parse(localStorage.getItem('vb_bill')||'[]');$('#gst').value=localStorage.getItem('vb_gst')||0;
- $('#thr').value=localStorage.getItem('vb_thr2')||0.55;$('#thrVal').textContent=(+$('#thr').value).toFixed(2);$('#showUnknown').checked=localStorage.getItem('vb_showU')!=='0';
+ $('#thr').value=localStorage.getItem('vb_thr2')||0.5;$('#thrVal').textContent=(+$('#thr').value).toFixed(2);$('#showUnknown').checked=localStorage.getItem('vb_showU')!=='0';
  negs=(await kvGet('negs'))||[];if(negs[0]&&negs[0].length!==EMB_DIM)negs=[];await refresh();await initFolder().catch(e=>console.warn('folder',e));
  try{status('Loading AI models…');await loadModels();status('Ready ✔');queue(()=>trainAll())}catch(e){console.error(e);status('Model load failed: '+e.message)}})();
