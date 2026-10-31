@@ -61,3 +61,12 @@ export async function segment(det,img,{extra=[],minScore=0.1,maxArea=0.6}={}){
  // parts: a box mostly inside a not-much-larger box (sub-part of the same item)
  b=b.filter(o=>!b.some(k=>k!==o&&area(k)>area(o)&&iou(k.box,o.box).inA>0.75&&area(k)<4*area(o)));
  return b.sort((x,y)=>x.box[1]-y.box[1]||x.box[0]-y.box[0])}
+// post-classification cleanup: merge fragments/parts of one item, keep separate copies of the same product
+export function dedupe(ds){const area=d=>d.box[2]*d.box[3];let r=[...ds].sort((a,b)=>area(b)-area(a)),changed=true;
+ while(changed){changed=false;outer:for(let i=0;i<r.length;i++)for(let j=i+1;j<r.length;j++){const a=r[i],b=r[j],o=iou(a.box,b.box);
+  const nested=o.inA>0.75,sameish=a.id===b.id||a.id==='unknown'||b.id==='unknown';
+  if((nested&&sameish)||(a.id===b.id&&o.cont>0.4)||(sameish&&o.iou>0.5)){
+   if(a.id==='unknown'&&b.id!=='unknown'){a.id=b.id;a.conf=b.conf;a.guess=b.guess}
+   if(a.id===b.id&&!nested){const x=Math.min(a.box[0],b.box[0]),y=Math.min(a.box[1],b.box[1]);a.box=[x,y,Math.max(a.box[0]+a.box[2],b.box[0]+b.box[2])-x,Math.max(a.box[1]+a.box[3],b.box[1]+b.box[3])-y]}
+   r.splice(j,1);changed=true;break outer}}}
+ return r.sort((a,b)=>a.box[1]-b.box[1]||a.box[0]-b.box[0])}

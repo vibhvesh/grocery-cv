@@ -43,6 +43,11 @@ async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(for
  if(n){await putItem(it);rebuildBank();reclassifyScans()}return n}
 async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0;for(const it of items)n+=await trainItem(it,force);status('Ready ✔');
  $('#trainInfo').textContent=`Model: ${bank.filter(b=>b.l!==V.BG).length} product embeddings from ${items.reduce((s,i)=>s+i.photos.length,0)} photos · ${negs.length} background examples. Updates automatically.`}
+$('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn');btn.disabled=true;status('Loading samples…');
+ const man=await (await fetch('samples/manifest.json')).json();const toURL=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
+ let n=0;for(const m of man){if(items.some(i=>i.name===m.name))continue;const photos=[];for(const u of m.photos)photos.push({src:await toURL(u),kind:'crop'});
+  await putItem({id:crypto.randomUUID(),name:m.name,price:m.price,category:m.category,unit:m.unit,notes:m.notes,photos});n++}
+ await refresh();btn.disabled=false;status(n?`Added ${n} sample products – learning…`:'Samples already loaded');queue(()=>trainAll())};
 $('#trainBtn').onclick=()=>queue(()=>trainAll(true));
 // ---------- products page ----------
 async function fileToDataURL(f,max=1024){const i=await loadImg(URL.createObjectURL(f));return toCanvas(i,max).toDataURL('image/jpeg',.88)}
@@ -69,7 +74,7 @@ async function scanCanvas(cv){const t0=performance.now();status('Step 1/2: findi
  const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});const sc={cv,dets:[],sel:-1};
  status(`Step 2/2: recognising ${boxes.length} crops…`);
  for(const b of boxes){const d=await makeDet(cv,R,b.box);if(b.big&&d.id==='unknown')continue;sc.dets.push(d)}
- sc.ms=Math.round(performance.now()-t0);scans.push(sc);renderScans();status('Ready ✔')}
+ sc.dets=V.dedupe(sc.dets);sc.ms=Math.round(performance.now()-t0);scans.push(sc);renderScans();status('Ready ✔')}
 async function makeDet(cv,R,box){const [e]=await V.embedCrop(fe,R,box);return{box,e,crop:cropURL(cv,box),...V.classify(bank,e,thr())}}
 const COLORS=['#2563eb','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#0f766e'];
 function renderScans(){const root=$('#scanResults');root.innerHTML='';const showU=$('#showUnknown').checked;
