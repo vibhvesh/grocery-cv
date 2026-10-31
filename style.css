@@ -16,3 +16,8 @@ button,.btn{padding:9px 14px;border-radius:8px;border:1px solid #ccd;background:
 video{width:100%;max-width:480px;border-radius:10px}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
 td input{width:70px}.totals{text-align:right;line-height:2}.totals input{width:70px;display:inline}.grand{font-size:1.2rem}
 @media print{header,.np,#setup,#bill>.card:first-child{display:none!important}.tab{display:block}.card{box-shadow:none}td input{border:none}}
+.inner{background:#f8fafc;box-shadow:none;border:1px solid #e3e6ee}.scanimg{margin:10px 0;border:1px solid #e3e6ee;border-radius:10px;padding:8px}
+.scanimg canvas.prev{width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:8px}.det{display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #eee}
+.det canvas{width:56px;height:56px;border-radius:6px}.det select{flex:1;width:auto;min-width:110px}.det .n{font-weight:700;min-width:24px}.det.sel{background:#fef9c3}
+.chip{display:inline-block;background:#dcfce7;border-radius:99px;padding:4px 12px;margin:3px;font-weight:600}.chip.unk{background:#fee2e2}
+[hidden]{display:none!important}

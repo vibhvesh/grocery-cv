@@ -3,7 +3,6 @@
 <link rel="icon" href="data:,"><link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.6/dist/knn-classifier.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -27,8 +26,12 @@
  <div class="card"><h2>Scan items</h2>
   <div class="row"><label class="btn">📷 Upload photo(s)<input id="billPhotos" type="file" accept="image/*" multiple hidden></label>
   <button id="camBtn">🎥 Webcam</button><button id="snapBtn" hidden class="primary">Capture</button>
-  <label class="chk"><input type="checkbox" id="multiDetect" checked> Detect multiple items per photo</label></div>
-  <video id="cam" playsinline hidden></video><div id="scanResults"></div></div>
+  <label class="chk"><input type="checkbox" id="multiDetect" checked> Detect multiple items</label></div>
+  <div class="row"><label style="flex:1">Unknown threshold (min similarity): <b id="thrVal">0.60</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.6"></label></div>
+  <video id="cam" playsinline hidden></video>
+  <p class="muted">Tip: spread items apart on a plain, contrasting background. Drag on a preview to draw a missing box; click a box to select it.</p>
+  <div id="scanResults"></div>
+  <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div>
  <div class="card printable"><div class="row between"><h2>Bill</h2><span class="muted" id="billDate"></span></div>
   <div class="tablewrap"><table id="billTable"><thead><tr><th>Item</th><th>Qty</th><th>Unit ₹</th><th>Total ₹</th><th class="np"></th></tr></thead><tbody></tbody></table></div>
   <div class="row np"><select id="manualItem"></select><button id="addManual">+ Add manually</button></div>
