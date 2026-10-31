@@ -24,3 +24,4 @@ td input{width:70px}.totals{text-align:right;line-height:2}.totals input{width:7
 .det{flex-wrap:wrap}.det .acts{display:flex;gap:6px;flex-wrap:wrap}.det .acts button{padding:6px 10px;font-size:.85rem}.det.unk{background:#fff7ed}
 .tag{font-size:.75rem;color:#9a3412;font-weight:600}details{margin:6px 0}summary{cursor:pointer}.bar{height:6px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:#16a34a;width:0}
 .tip{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:8px 10px;font-size:.9rem}
+.samples{background:#f0fdf4;border:1px solid #bbf7d0}

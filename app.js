@@ -1,4 +1,5 @@
-import * as V from './vision.js';
+import * as V from './vision.js?v=5';
+const APP_VERSION='5';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -39,15 +40,19 @@ async function embedPhoto(it,p){const im=await loadImg(p.src),cv=toCanvas(im);
  const r=await V.trainPhoto(det,fe,raw(cv),{name:it.name});p.emb=r.pos;p.box=r.box;p.thumb=cropURL(cv,r.box,0.1,128);
  // negatives: scene objects that don't look like any known product
  const kept=r.neg.filter(e=>V.classify(bank.filter(b=>b.l!==V.BG),e,0).conf<0.8);negs.push(...kept);if(negs.length>400)negs=negs.slice(-400);await kvSet('negs',negs)}
-async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(force||!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)){status(`Learning ${it.name} (${++n})…`);await embedPhoto(it,p)}
+async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(force||!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)){$('#trainInfo').textContent=`Learning ${it.name}: photo ${++n}…`;await embedPhoto(it,p)}
  if(n){await putItem(it);rebuildBank();reclassifyScans()}return n}
-async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0;for(const it of items)n+=await trainItem(it,force);status('Ready ✔');
+async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0,k=0;const todo=items.filter(it=>force||it.photos.some(p=>!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)));
+ for(const it of todo){status(`Learning ${k+1}/${todo.length}…`);$('#trainInfo').textContent=`Learning product ${++k}/${todo.length}: ${it.name}…`;n+=await trainItem(it,force);await refresh()}status('Ready ✔');if(todo.length&&/Added/.test($('#samplesInfo').textContent))$('#samplesInfo').textContent='✔ Sample products learned – open Billing and scan a photo.';
  $('#trainInfo').textContent=`Model: ${bank.filter(b=>b.l!==V.BG).length} product embeddings from ${items.reduce((s,i)=>s+i.photos.length,0)} photos · ${negs.length} background examples. Updates automatically.`}
-$('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn');btn.disabled=true;status('Loading samples…');
- const man=await (await fetch('samples/manifest.json')).json();const toURL=async u=>{const b=await (await fetch(u)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
- let n=0;for(const m of man){if(items.some(i=>i.name===m.name))continue;const photos=[];for(const u of m.photos)photos.push({src:await toURL(u),kind:'crop'});
-  await putItem({id:crypto.randomUUID(),name:m.name,price:m.price,category:m.category,unit:m.unit,notes:m.notes,photos});n++}
- await refresh();btn.disabled=false;status(n?`Added ${n} sample products – learning…`:'Samples already loaded');queue(()=>trainAll())};
+$('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn'),info=$('#samplesInfo');btn.disabled=true;
+ try{info.textContent='Fetching sample list…';const man=await (await fetch('samples/manifest.json?v='+APP_VERSION,{cache:'no-store'})).json();
+  const toURL=async u=>{const b=await (await fetch(u+'?v='+APP_VERSION)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
+  let n=0,k=0;for(const m of man){k++;if(items.some(i=>i.name===m.name))continue;info.textContent=`Adding ${k}/${man.length}: ${m.name}…`;
+   const photos=await Promise.all(m.photos.map(async u=>({src:await toURL(u),kind:'crop'})));
+   await putItem({id:crypto.randomUUID(),name:m.name,price:m.price,category:m.category,unit:m.unit,notes:m.notes,photos});n++;await refresh()}
+  info.textContent=n?`✔ Added ${n} sample products. ${det?'Learning them now…':'They will be learned as soon as the AI models finish downloading.'}`:'✔ Sample products are already loaded.';
+  queue(()=>trainAll())}catch(e){console.error(e);info.textContent='Could not load samples: '+e.message}finally{btn.disabled=false}};
 $('#trainBtn').onclick=()=>queue(()=>trainAll(true));
 // ---------- products page ----------
 async function fileToDataURL(f,max=1024){const i=await loadImg(URL.createObjectURL(f));return toCanvas(i,max).toDataURL('image/jpeg',.88)}

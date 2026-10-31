@@ -1,12 +1,13 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=5">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill</h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v5</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
+ <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div></div>
  <div class="card"><h2>Add / edit product</h2>
   <form id="itemForm"><input type="hidden" id="itemId">
    <div class="grid"><label>Name<input id="iname" required></label><label>Price (₹)<input id="iprice" type="number" step="0.01" min="0" required></label>
@@ -16,7 +17,7 @@
    <div id="previewPhotos" class="thumbs"></div>
    <div class="row"><button type="submit" class="primary">Save product</button><button type="button" id="resetForm">Clear</button></div>
   </form></div>
- <div class="card"><div class="row between"><h2>Products</h2><button id="samplesBtn" class="primary">📦 Load sample products</button><button id="trainBtn" title="Recompute all embeddings">↻ Retrain all</button></div>
+ <div class="card"><div class="row between"><h2>Products</h2><button id="trainBtn" title="Recompute all embeddings">↻ Retrain all</button></div>
   <div id="trainInfo" class="muted"></div><div id="itemList"></div></div>
 </section>
 <section id="bill" class="tab">
@@ -42,4 +43,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js"></script></body></html>
+<script type="module" src="app.js?v=5"></script></body></html>
