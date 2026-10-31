@@ -21,3 +21,6 @@ td input{width:70px}.totals{text-align:right;line-height:2}.totals input{width:7
 .det canvas{width:56px;height:56px;border-radius:6px}.det select{flex:1;width:auto;min-width:110px}.det .n{font-weight:700;min-width:24px}.det.sel{background:#fef9c3}
 .chip{display:inline-block;background:#dcfce7;border-radius:99px;padding:4px 12px;margin:3px;font-weight:600}.chip.unk{background:#fee2e2}
 [hidden]{display:none!important}
+.det{flex-wrap:wrap}.det .acts{display:flex;gap:6px;flex-wrap:wrap}.det .acts button{padding:6px 10px;font-size:.85rem}.det.unk{background:#fff7ed}
+.tag{font-size:.75rem;color:#9a3412;font-weight:600}details{margin:6px 0}summary{cursor:pointer}.bar{height:6px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:#16a34a;width:0}
+.tip{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:8px 10px;font-size:.9rem}

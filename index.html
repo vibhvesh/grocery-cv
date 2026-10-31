@@ -1,9 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
 <link rel="icon" href="data:,"><link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
@@ -15,21 +12,25 @@
    <div class="grid"><label>Name<input id="iname" required></label><label>Price (₹)<input id="iprice" type="number" step="0.01" min="0" required></label>
    <label>Category<input id="icat" placeholder="Fruits, Dairy…"></label><label>Weight / unit<input id="iunit" placeholder="1 kg, 500 ml, per piece"></label></div>
    <label>Notes<input id="inotes"></label>
-   <label>Training photos (several angles)<input id="iphotos" type="file" accept="image/*" multiple></label>
+   <label>Training photos (several angles; each is auto-cropped to the item — retraining is automatic)<input id="iphotos" type="file" accept="image/*" multiple></label>
    <div id="previewPhotos" class="thumbs"></div>
    <div class="row"><button type="submit" class="primary">Save product</button><button type="button" id="resetForm">Clear</button></div>
   </form></div>
- <div class="card"><div class="row between"><h2>Products</h2><button id="trainBtn" class="primary">⚙️ Train model</button></div>
+ <div class="card"><div class="row between"><h2>Products</h2><button id="trainBtn" title="Recompute all embeddings">↻ Retrain all</button></div>
   <div id="trainInfo" class="muted"></div><div id="itemList"></div></div>
 </section>
 <section id="bill" class="tab">
  <div class="card"><h2>Scan items</h2>
-  <div class="row"><label class="btn">📷 Upload photo(s)<input id="billPhotos" type="file" accept="image/*" multiple hidden></label>
-  <button id="camBtn">🎥 Webcam</button><button id="snapBtn" hidden class="primary">Capture</button>
-  <label class="chk"><input type="checkbox" id="multiDetect" checked> Detect multiple items</label></div>
-  <div class="row"><label style="flex:1">Unknown threshold (min similarity): <b id="thrVal">0.60</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.6"></label></div>
+  <div class="row"><label class="btn primary">📷 Photo(s)<input id="billPhotos" type="file" accept="image/*" multiple hidden></label>
+  <button id="camBtn">🎥 Webcam</button><button id="snapBtn" hidden class="primary">Capture</button></div>
+  <details><summary class="muted">Settings</summary>
+   <label class="chk"><input type="checkbox" id="showUnknown" checked> Show “Not in database” items</label>
+   <label class="chk"><input type="checkbox" id="hiAcc"> High-recall detector (OWLv2, slower, +155 MB once)</label>
+   <label>Match threshold (min similarity): <b id="thrVal">0.55</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.55"></label>
+   <div class="muted" id="engineInfo"></div></details>
   <video id="cam" playsinline hidden></video>
-  <p class="muted">Tip: spread items apart on a plain, contrasting background. Drag on a preview to draw a missing box; click a box to select it.</p>
+  <p class="tip">📸 Best results: put items on a <b>plain light tray or sheet</b>, shoot <b>straight from above</b> in even light, and leave a small gap between items.</p>
+  <p class="muted">Step 1 finds &amp; crops every item, Step 2 recognises each crop. Teach unknown crops with <b>➕ New product</b>, or pick the right product in the dropdown (saved as training automatically). Drag on a photo to draw a missed item.</p>
   <div id="scanResults"></div>
   <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div>
  <div class="card printable"><div class="row between"><h2>Bill</h2><span class="muted" id="billDate"></span></div>
@@ -41,4 +42,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script src="app.js"></script></body></html>
+<script type="module" src="app.js"></script></body></html>
