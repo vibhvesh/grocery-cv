@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VisionBill – Grocery CV Billing</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.6/dist/knn-classifier.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+</head><body>
+<header><h1>🛒 VisionBill</h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<main>
+<section id="setup" class="tab active">
+ <div class="card"><h2>Add / edit product</h2>
+  <form id="itemForm"><input type="hidden" id="itemId">
+   <div class="grid"><label>Name<input id="iname" required></label><label>Price (₹)<input id="iprice" type="number" step="0.01" min="0" required></label>
+   <label>Category<input id="icat" placeholder="Fruits, Dairy…"></label><label>Weight / unit<input id="iunit" placeholder="1 kg, 500 ml, per piece"></label></div>
+   <label>Notes<input id="inotes"></label>
+   <label>Training photos (several angles)<input id="iphotos" type="file" accept="image/*" multiple></label>
+   <div id="previewPhotos" class="thumbs"></div>
+   <div class="row"><button type="submit" class="primary">Save product</button><button type="button" id="resetForm">Clear</button></div>
+  </form></div>
+ <div class="card"><div class="row between"><h2>Products</h2><button id="trainBtn" class="primary">⚙️ Train model</button></div>
+  <div id="trainInfo" class="muted"></div><div id="itemList"></div></div>
+</section>
+<section id="bill" class="tab">
+ <div class="card"><h2>Scan items</h2>
+  <div class="row"><label class="btn">📷 Upload photo(s)<input id="billPhotos" type="file" accept="image/*" multiple hidden></label>
+  <button id="camBtn">🎥 Webcam</button><button id="snapBtn" hidden class="primary">Capture</button>
+  <label class="chk"><input type="checkbox" id="multiDetect" checked> Detect multiple items per photo</label></div>
+  <video id="cam" playsinline hidden></video><div id="scanResults"></div></div>
+ <div class="card printable"><div class="row between"><h2>Bill</h2><span class="muted" id="billDate"></span></div>
+  <div class="tablewrap"><table id="billTable"><thead><tr><th>Item</th><th>Qty</th><th>Unit ₹</th><th>Total ₹</th><th class="np"></th></tr></thead><tbody></tbody></table></div>
+  <div class="row np"><select id="manualItem"></select><button id="addManual">+ Add manually</button></div>
+  <div class="totals"><div>Subtotal <b id="subtotal">₹0.00</b></div>
+   <div>GST % <input id="gst" type="number" min="0" step="0.5" value="0" style="width:70px"> <b id="gstAmt">₹0.00</b></div>
+   <div class="grand">Grand total <b id="grand">₹0.00</b></div></div>
+  <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
+ </div>
+</section></main>
+<script src="app.js"></script></body></html>
