@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=7';
-const APP_VERSION='7',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=8';
+const APP_VERSION='8',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -77,17 +77,25 @@ async function newProductFromCrop(d,name,price){if(!name){name=prompt('New produ
  const it={id:crypto.randomUUID(),name:name.trim(),price,category:'',unit:'',notes:'',photos:[]};await putItem(it);items.push(it);d.id=it.id;d.manual=true;d.open=false;await addCropTo(it.id,d,'new');renderScans()}
 function reclassifyScans(){for(const sc of scans)for(const d of sc.dets){const r=V.decide(V.scoreViews(bank,d.es),thr(),MARGIN);if(d.manual&&items.find(i=>i.id==d.id)){d.top3=r.top3;continue}Object.assign(d,r)}renderScans()}
 // ---------- scanning ----------
-async function scanCanvas(cv,full){full=full||cv;const t0=performance.now();status('Step 1/2: finding items…');const R=raw(cv);
- const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});const sc={cv,full,dets:[],sel:-1};
- let k=0;for(const b of boxes){status(`Step 2/2: closer look at item ${++k}/${boxes.length}…`);const d=await makeDet(sc,b.box);if(b.big&&d.id==='unknown')continue;sc.dets.push(d)}
- sc.dets=V.dedupe(sc.dets);sc.ms=Math.round(performance.now()-t0);scans.push(sc);renderScans();status('Ready ✔')}
-// views of one crop from the ORIGINAL full-resolution image: padded + tight crop, 4 rotations, flip, centre crop
-function viewCanvases(full,box,s){const [x,y,w,h]=box.map(v=>v*s),out=[];
+async function scanCanvas(cv,full,tDecode=0){full=full||cv;const T0=performance.now(),tm={decode:Math.round(tDecode)};status('Step 1/2: finding items…');const R=raw(cv);
+ const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});tm.detect=Math.round(performance.now()-T0);
+ const sc={cv,full,dets:[],sel:-1,pending:boxes.length,tm};scans.push(sc);
+ // pass 1 (fast): one padded full-res crop per item, all embedded in one batched call
+ const s=full.width/cv.width;let t=performance.now();const v1=boxes.map(b=>viewCanvases(full,b.box,s,'fast')[0]);
+ status(`Step 2/2: recognising ${boxes.length} items…`);const e1=await V.embedBatch(fe,v1.map(raw));tm.pass1=Math.round(performance.now()-t);
+ let ds=boxes.map((b,i)=>{const es=[e1[i]];const r=V.decide(V.scoreViews(bank,es),thr(),MARGIN);return{box:b.box,big:b.big,es,crop:cropURL(full,b.box.map(v=>v*s)),...r}});
+ sc.dets=V.dedupe(ds.filter(d=>!(d.big&&d.id==='unknown')));sc.pending=0;renderScans();
+ // pass 2 (closer look) only for uncertain items: +6 views (3 rotations, flip, tight crop, centre zoom)
+ t=performance.now();const thorough=false,nx=6;const unsure=!$('#closer').checked?[]:sc.dets.filter(d=>d.conf<0.7||d.margin<0.05);
+ if(unsure.length){status(`Closer look at ${unsure.length} uncertain item(s)…`);const vs=unsure.flatMap(d=>viewCanvases(full,d.box,s,thorough?'thorough':'extra'));const e2=await V.embedBatch(fe,vs.map(raw));
+  unsure.forEach((d,i)=>{d.es=[...d.es,...e2.slice(i*nx,i*nx+nx)];const r=V.decide(V.scoreViews(bank,d.es),thr(),MARGIN);if(!d.manual)Object.assign(d,r);else d.top3=r.top3;d.closer=true});sc.dets=V.dedupe(sc.dets)}
+ tm.pass2=Math.round(performance.now()-t);tm.unsure=unsure.length;sc.ms=Math.round(performance.now()-T0+tDecode);renderScans();status('Ready ✔')}
+// views of one crop from the ORIGINAL (full-res) image
+function viewCanvases(full,box,s,mode='fast'){const [x,y,w,h]=box.map(v=>v*s),out=[];
  const sq=(pad,zoom=1)=>{const S=Math.max(w,h)*(1+2*pad)*zoom,cx=x+w/2,cy=y+h/2,c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.fillStyle='#d7d4d0';g.fillRect(0,0,224,224);g.drawImage(full,cx-S/2,cy-S/2,S,S,0,0,224,224);return c};
  const tf=(src,rot,flip)=>{const c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.translate(112,112);g.rotate(rot*Math.PI/2);if(flip)g.scale(-1,1);g.drawImage(src,-112,-112);return c};
- for(const pad of [0.1,0.02]){const c=sq(pad);for(let r=0;r<4;r++)out.push(tf(c,r,false));out.push(tf(c,0,true))}
- out.push(sq(0.1,0.8));return $('#closer').checked?out:[out[0]]}
-async function makeDet(sc,box){const s=sc.full.width/sc.cv.width,es=[];for(const v of viewCanvases(sc.full,box,s))es.push(await V.embed(fe,raw(v)));
+ if(mode==='fast')return[sq(0.1)];if(mode==='thorough'){const o=[];for(const pad of [0.1,0.02]){const c=sq(pad);for(let r=0;r<4;r++)if(pad!==0.1||r)o.push(tf(c,r,false));o.push(tf(c,0,true))}o.push(sq(0.1,0.8));return o}const c=sq(0.1),t=sq(0.02);return[tf(c,1,false),tf(c,2,false),tf(c,3,false),tf(c,0,true),t,sq(0.1,0.8)]}
+async function makeDet(sc,box){const s=sc.full.width/sc.cv.width;const vs=[...viewCanvases(sc.full,box,s,'fast'),...viewCanvases(sc.full,box,s,'extra')];const es=await V.embedBatch(fe,vs.map(raw));
  const r=V.decide(V.scoreViews(bank,es),thr(),MARGIN);return{box,es,crop:cropURL(sc.full,box.map(v=>v*s)),...r}}
 const COLORS=['#2563eb','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#0f766e'];
 function renderScans(){const root=$('#scanResults');root.innerHTML='';const showU=$('#showUnknown').checked;
@@ -119,7 +127,7 @@ function renderScans(){const root=$('#scanResults');root.innerHTML='';const show
    const tb=row.querySelector('[data-a=teach]');if(tb)tb.onclick=()=>{tb.disabled=true;tb.textContent='✔ Saved';queue(()=>addCropTo(d.id,d,'confirm'))};
    row.querySelector('[data-a=del]').onclick=()=>{sc.dets.splice(i,1);sc.sel=-1;renderScans()};
    row.onclick=e=>{if(e.target===row||e.target.className=='n'){sc.sel=i;renderScans()}};wrap.append(row)});
-  const ctl=document.createElement('div');ctl.className='row';ctl.innerHTML=`<span class="muted">${sc.dets.length} item(s) found${hidden?`, ${hidden} not-in-database hidden`:''} · ${sc.ms} ms</span><button>Remove photo</button>`;ctl.querySelector('button').onclick=()=>{scans.splice(si,1);renderScans()};wrap.append(ctl);root.append(wrap)});
+  const ctl=document.createElement('div');ctl.className='row';ctl.innerHTML=`<span class="muted">${sc.dets.length} item(s) found${hidden?`, ${hidden} not-in-database hidden`:''} · ${sc.ms} ms${sc.tm?` (decode ${sc.tm.decode}, find ${sc.tm.detect}, recognise ${sc.tm.pass1}, closer look ${sc.tm.pass2} ms on ${sc.tm.unsure})`:''}</span><button>Remove photo</button>`;ctl.querySelector('button').onclick=()=>{scans.splice(si,1);renderScans()};wrap.append(ctl);root.append(wrap)});
  renderSummary()}
 function counts(){const c={};scans.forEach(s=>s.dets.forEach(d=>c[d.id]=(c[d.id]||0)+(d.qty||1)));return c}
 function renderSummary(){const c=counts();$('#summaryBox').hidden=!scans.length;$('#summary').innerHTML=Object.entries(c).sort((a,b)=>(a[0]==='unknown')-(b[0]==='unknown')).map(([id,n])=>`<span class="chip ${id==='unknown'?'unk':''}">${esc(nameOf(id))} × ${n}</span>`).join('')||'<span class="muted">Nothing detected</span>'}
@@ -128,10 +136,14 @@ $('#clearScans').onclick=()=>{scans=[];renderScans()};$('#closer').checked=local
 $('#thr').oninput=()=>{$('#thrVal').textContent=(+$('#thr').value).toFixed(2);localStorage.setItem('vb_thr2',$('#thr').value);reclassifyScans()};
 $('#hiAcc').onchange=()=>{localStorage.setItem('vb_hi',$('#hiAcc').checked?1:0);if(confirm('Reload now to switch detector?'))location.reload()};
 const needModels=()=>{if(!det){alert('Models are still loading…');return true}};
-$('#billPhotos').onchange=async e=>{if(needModels())return;const fs=[...e.target.files];e.target.value='';for(const f of fs){const im=await loadImg(URL.createObjectURL(f));const cv=toCanvas(im),full=toCanvas(im,3072);queue(()=>scanCanvas(cv,full))}};
+$('#billPhotos').onchange=async e=>{if(needModels())return;const fs=[...e.target.files];e.target.value='';for(const f of fs){const t=performance.now();status('Decoding photo…');const {cv,full}=await decodePhoto(f);const td=performance.now()-t;queue(()=>scanCanvas(cv,full,td))}};
 let stream;$('#camBtn').onclick=async()=>{const v=$('#cam');if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;v.hidden=$('#snapBtn').hidden=true;return}
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}});v.srcObject=stream;await v.play();v.hidden=$('#snapBtn').hidden=false}catch(err){alert('Camera unavailable: '+err.message)}};
-$('#snapBtn').onclick=()=>{if(needModels())return;const cv=toCanvas($('#cam')),full=toCanvas($('#cam'),3072);queue(()=>scanCanvas(cv,full))};
+$('#snapBtn').onclick=()=>{if(needModels())return;const cv=toCanvas($('#cam')),full=toCanvas($('#cam'),2048);queue(()=>scanCanvas(cv,full))};
+async function decodePhoto(f){let bmp;try{bmp=await createImageBitmap(f,{imageOrientation:'from-image'})}catch{bmp=await loadImg(URL.createObjectURL(f))}
+ const W=bmp.width||bmp.naturalWidth,H=bmp.height||bmp.naturalHeight;let full=bmp;
+ if(Math.max(W,H)>3072){try{full=await createImageBitmap(bmp,{resizeWidth:Math.round(W*3072/Math.max(W,H)),resizeHeight:Math.round(H*3072/Math.max(W,H)),resizeQuality:'high'})}catch{full=toCanvas(bmp,3072)}}
+ return{full:toCanvas(full,3072),cv:toCanvas(full,1280)}}
 // ---------- bill ----------
 function addToBill(id,q){const l=bill.find(b=>b.id==id);l?l.qty+=q:bill.push({id,qty:q});saveBill()}
 function saveBill(){localStorage.setItem('vb_bill',JSON.stringify(bill));localStorage.setItem('vb_gst',$('#gst').value);renderBill()}

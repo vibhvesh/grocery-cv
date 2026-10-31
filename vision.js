@@ -75,3 +75,5 @@ export function scoreViews(bank,es){const acc={};for(const e of es){const best={
  const bg=acc[BG]??-1;delete acc[BG];return{ranked:Object.entries(acc).sort((a,b)=>b[1]-a[1]).map(([id,s])=>({id,s})),bg}}
 export function decide({ranked,bg},thr=0.55,minMargin=0.02){if(!ranked.length)return{id:'unknown',conf:0,guess:null,margin:0,top3:[]};const [a,b]=ranked,margin=a.s-(b?b.s:0);
  const ok=a.s>=thr&&margin>=minMargin&&a.s>bg+0.02;return{id:ok?a.id:'unknown',conf:a.s,guess:a.id,margin,top3:ranked.slice(0,3)}}
+// batched embeddings: one model call for many crops
+export async function embedBatch(fe,imgs,bs=8){const out=[];for(let i=0;i<imgs.length;i+=bs){const o=await fe(imgs.slice(i,i+bs));const [n,t,D]=o.dims;for(let k=0;k<n;k++){const d=Array.from(o.data.slice(k*t*D,k*t*D+D));const m=Math.hypot(...d)||1;out.push(d.map(v=>v/m))}}return out}
