@@ -1,13 +1,14 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=5">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=6">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v5</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v6</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
- <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div></div>
+ <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div>
+  <div class="row"><button id="folderBtn" hidden>📂 Connect folder</button><button id="exportBtn">⬇️ Export database</button><button id="importBtn">⬆️ Import database</button><input id="importFile" type="file" accept=".json,application/json" hidden></div><div id="folderInfo" class="muted">Learning is kept in this browser. Connect a folder (Chrome/Edge) to also save it as files, or Export to move it to another device.</div></div>
  <div class="card"><h2>Add / edit product</h2>
   <form id="itemForm"><input type="hidden" id="itemId">
    <div class="grid"><label>Name<input id="iname" required></label><label>Price (₹)<input id="iprice" type="number" step="0.01" min="0" required></label>
@@ -43,4 +44,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js?v=5"></script></body></html>
+<script type="module" src="app.js?v=6"></script></body></html>

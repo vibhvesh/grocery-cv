@@ -1,11 +1,12 @@
-import * as V from './vision.js?v=5';
-const APP_VERSION='5';
+import * as V from './vision.js?v=6';
+const APP_VERSION='6',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
 const tx=(s,m='readonly')=>db.transaction(s,m).objectStore(s),req=r=>new Promise((a,b)=>{r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error)});
-const getItems=()=>req(tx('items').getAll()),putItem=i=>req(tx('items','readwrite').put(i)),delItem=id=>req(tx('items','readwrite').delete(id));
-const kvGet=k=>req(tx('kv').get(k)),kvSet=(k,v)=>req(tx('kv','readwrite').put(v,k));
+const getItems=()=>req(tx('items').getAll()),putItem0=i=>req(tx('items','readwrite').put(i)),delItem0=id=>req(tx('items','readwrite').delete(id));
+const kvGet=k=>req(tx('kv').get(k)),kvSet0=(k,v)=>req(tx('kv','readwrite').put(v,k));
+const putItem=async i=>{await putItem0(i);scheduleSave()},delItem=async id=>{await delItem0(id);scheduleSave()},kvSet=async(k,v)=>{await kvSet0(k,v);if(k==='negs')scheduleSave()};
 // ---------- state / utils ----------
 const $=s=>document.querySelector(s);let T,det,fe,items=[],negs=[],bank=[],pendingPhotos=[],bill=[],scans=[],busy=Promise.resolve();
 window.VB={get items(){return items},get scans(){return scans},get ready(){return !!(det&&fe)}};
@@ -36,22 +37,22 @@ async function loadModels(){const hi=localStorage.getItem('vb_hi')==='1';$('#hiA
 // ---------- training data (incremental) ----------
 function rebuildBank(){bank=[];for(const it of items)for(const p of it.photos)for(const e of p.emb||[])bank.push({l:it.id,e});for(const e of negs)bank.push({l:V.BG,e})}
 async function embedPhoto(it,p){const im=await loadImg(p.src),cv=toCanvas(im);
- if(p.kind==='crop'){p.emb=await V.embedCrop(fe,raw(cv),[0,0,cv.width,cv.height],true);p.thumb=p.src;return}
- const r=await V.trainPhoto(det,fe,raw(cv),{name:it.name});p.emb=r.pos;p.box=r.box;p.thumb=cropURL(cv,r.box,0.1,128);
+ if(p.kind==='crop'){p.emb=await V.embedCrop(fe,raw(cv),[0,0,cv.width,cv.height],true);p.model=MODEL_TAG;p.thumb=p.src;return}
+ const r=await V.trainPhoto(det,fe,raw(cv),{name:it.name});p.emb=r.pos;p.model=MODEL_TAG;p.box=r.box;p.thumb=cropURL(cv,r.box,0.1,128);
  // negatives: scene objects that don't look like any known product
  const kept=r.neg.filter(e=>V.classify(bank.filter(b=>b.l!==V.BG),e,0).conf<0.8);negs.push(...kept);if(negs.length>400)negs=negs.slice(-400);await kvSet('negs',negs)}
-async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(force||!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)){$('#trainInfo').textContent=`Learning ${it.name}: photo ${++n}…`;await embedPhoto(it,p)}
+async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(force||!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)||(p.model&&p.model!==MODEL_TAG)){$('#trainInfo').textContent=`Learning ${it.name}: photo ${++n}…`;await embedPhoto(it,p)}
  if(n){await putItem(it);rebuildBank();reclassifyScans()}return n}
-async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0,k=0;const todo=items.filter(it=>force||it.photos.some(p=>!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)));
+async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0,k=0;const todo=items.filter(it=>force||it.photos.some(p=>!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)||(p.model&&p.model!==MODEL_TAG)));
  for(const it of todo){status(`Learning ${k+1}/${todo.length}…`);$('#trainInfo').textContent=`Learning product ${++k}/${todo.length}: ${it.name}…`;n+=await trainItem(it,force);await refresh()}status('Ready ✔');if(todo.length&&/Added/.test($('#samplesInfo').textContent))$('#samplesInfo').textContent='✔ Sample products learned – open Billing and scan a photo.';
  $('#trainInfo').textContent=`Model: ${bank.filter(b=>b.l!==V.BG).length} product embeddings from ${items.reduce((s,i)=>s+i.photos.length,0)} photos · ${negs.length} background examples. Updates automatically.`}
 $('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn'),info=$('#samplesInfo');btn.disabled=true;
- try{info.textContent='Fetching sample list…';const man=await (await fetch('samples/manifest.json?v='+APP_VERSION,{cache:'no-store'})).json();
+ try{info.textContent='Fetching sample list…';const man=await (await fetch('samples/manifest.json?v='+APP_VERSION,{cache:'no-store'})).json();const embs=await fetch('samples/embeddings.json?v='+APP_VERSION).then(r=>r.ok?r.json():null).catch(()=>null);if(embs&&embs.model===MODEL_TAG)man.forEach(m=>{m.model=MODEL_TAG;m.emb=embs.items[m.name]});
   const toURL=async u=>{const b=await (await fetch(u+'?v='+APP_VERSION)).blob();return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})};
   let n=0,k=0;for(const m of man){k++;if(items.some(i=>i.name===m.name))continue;info.textContent=`Adding ${k}/${man.length}: ${m.name}…`;
-   const photos=await Promise.all(m.photos.map(async u=>({src:await toURL(u),kind:'crop'})));
+   const pre=m.model===MODEL_TAG&&m.emb;const photos=await Promise.all(m.photos.map(async(u,j)=>({src:await toURL(u),kind:'crop',thumb:null,...(pre&&m.emb[j]?{emb:m.emb[j],model:MODEL_TAG}:{})})));photos.forEach(p=>p.thumb=p.src);
    await putItem({id:crypto.randomUUID(),name:m.name,price:m.price,category:m.category,unit:m.unit,notes:m.notes,photos});n++;await refresh()}
-  info.textContent=n?`✔ Added ${n} sample products. ${det?'Learning them now…':'They will be learned as soon as the AI models finish downloading.'}`:'✔ Sample products are already loaded.';
+  info.textContent=n?`✔ Added ${n} sample products${man[0].emb?' with pre-learned embeddings (no relearning needed)':''}. ${man[0].emb?'':det?'Learning them now…':'They will be learned as soon as the AI models finish downloading.'}`:'✔ Sample products are already loaded.';
   queue(()=>trainAll())}catch(e){console.error(e);info.textContent='Could not load samples: '+e.message}finally{btn.disabled=false}};
 $('#trainBtn').onclick=()=>queue(()=>trainAll(true));
 // ---------- products page ----------
@@ -69,7 +70,7 @@ async function refresh(){items=(await getItems()).map(i=>({...i,photos:(i.photos
  $('#itemList').querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(confirm('Delete product?')){await delItem(b.dataset.d);await refresh();reclassifyScans()}});
  $('#manualItem').innerHTML=items.map(i=>`<option value="${i.id}">${esc(i.name)} (${inr(i.price)})</option>`).join('');renderBill()}
 // ---------- active learning from crops ----------
-async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({src:d.crop,kind:'crop',emb:await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),thumb:d.crop,from:kind});
+async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({src:d.crop,kind:'crop',emb:await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),model:MODEL_TAG,thumb:d.crop,from:kind});
  await putItem(it);await refresh();reclassifyScans()}
 async function newProductFromCrop(d){const name=prompt('New product name:');if(!name)return;const price=+prompt(`Price of ${name} in ₹:`,'0')||0;
  const it={id:crypto.randomUUID(),name:name.trim(),price,category:'',unit:'',notes:'',photos:[]};await putItem(it);items.push(it);await addCropTo(it.id,d,'new');d.id=it.id;d.manual=true;renderScans()}
@@ -129,8 +130,45 @@ $('#pdfBtn').onclick=()=>{const {jsPDF}=window.jspdf,d=new jsPDF(),t=totals(),R=
  d.autoTable({startY:28,head:[['#','Item','Qty','Unit price','Total']],body:t.lines.map((l,i)=>[i+1,l.name+(l.unit?` (${l.unit})`:''),l.qty,R(l.price),R(l.total)]),
   foot:[['','','','Subtotal',R(t.sub)],['','','',`GST ${$('#gst').value||0}%`,R(t.g)],['','','','Grand total',R(t.grand)]],theme:'grid',headStyles:{fillColor:[22,163,74]},footStyles:{fillColor:[240,240,240],textColor:20}});
  d.save(`bill-${Date.now()}.pdf`)};
+// ---------- persistence: folder (File System Access API) + export/import ----------
+let dir=null,saveT=null,loadingSnap=false;const hasFS='showDirectoryPicker' in window;const r4=v=>Math.round(v*1e4)/1e4;
+function settingsObj(){const s={};for(const k of ['vb_thr2','vb_showU','vb_hi','vb_gst'])s[k]=localStorage.getItem(k);return s}
+async function snapshot(){const its=(await getItems());return{format:'visionbill-db',version:1,app:APP_VERSION,model:MODEL_TAG,saved:new Date().toISOString(),items:its,negs:(await kvGet('negs'))||[],settings:settingsObj()}}
+async function applySnapshot(s){if(s.format!=='visionbill-db')throw new Error('Not a VisionBill database');loadingSnap=true;
+ const st=tx('items','readwrite');await req(st.clear());for(const it of s.items)await putItem0(it);await kvSet0('negs',s.negs||[]);negs=s.negs||[];
+ for(const [k,v] of Object.entries(s.settings||{}))if(v!=null)localStorage.setItem(k,v);loadingSnap=false;await refresh();if(det)queue(()=>trainAll())}
+const dataURLtoBlob=u=>fetch(u).then(r=>r.blob());const blobToDataURL=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+async function writeFile(d,name,data){const fh=await d.getFileHandle(name,{create:true});const w=await fh.createWritable();await w.write(data);await w.close()}
+async function exists(d,name){try{await d.getFileHandle(name);return true}catch{return false}}
+async function saveToFolder(){if(!dir||loadingSnap)return;const s=await snapshot();const ph=await dir.getDirectoryHandle('photos',{create:true});const emb={model:MODEL_TAG,items:{}};
+ const products=s.items.map(it=>({id:it.id,name:it.name,price:it.price,category:it.category,unit:it.unit,notes:it.notes,photos:it.photos.map((p,i)=>{const f=`${it.id}_${i}.jpg`,t=`${it.id}_${i}_thumb.jpg`;return{file:'photos/'+f,thumb:p.thumb&&p.thumb!==p.src?'photos/'+t:null,kind:p.kind,box:p.box||null,from:p.from||null}})}));
+ for(const it of s.items){emb.items[it.id]=it.photos.map(p=>(p.emb||[]).map(v=>v.map(r4)));for(const [i,p] of it.photos.entries()){const f=`${it.id}_${i}.jpg`,t=`${it.id}_${i}_thumb.jpg`;
+   if(!await exists(ph,f))await writeFile(ph,f,await dataURLtoBlob(p.src));if(p.thumb&&p.thumb!==p.src&&!await exists(ph,t))await writeFile(ph,t,await dataURLtoBlob(p.thumb))}}
+ emb.negs=s.negs.map(v=>v.map(r4));
+ await writeFile(dir,'products.json',JSON.stringify({format:'visionbill-db',version:1,app:APP_VERSION,model:MODEL_TAG,saved:s.saved,products},null,1));
+ await writeFile(dir,'embeddings.json',JSON.stringify(emb));await writeFile(dir,'settings.json',JSON.stringify(s.settings,null,1));
+ $('#folderInfo').textContent=`💾 Saved to folder “${dir.name}” at ${new Date().toLocaleTimeString('en-IN')} (${s.items.length} products)`}
+async function loadFromFolder(){if(!await exists(dir,'products.json')){await saveToFolder();return false}
+ const rd=async n=>JSON.parse(await (await (await dir.getFileHandle(n)).getFile()).text());const P=await rd('products.json'),E=await rd('embeddings.json').catch(()=>({items:{},negs:[]})),S=await rd('settings.json').catch(()=>({}));
+ const ph=await dir.getDirectoryHandle('photos',{create:true});const file=async path=>blobToDataURL(await (await ph.getFileHandle(path.replace('photos/',''))).getFile());
+ const its=[];for(const p of P.products){const photos=[];for(const [i,q] of p.photos.entries()){const src=await file(q.file);const e=E.model===MODEL_TAG?(E.items[p.id]||[])[i]:null;photos.push({src,thumb:q.thumb?await file(q.thumb):src,kind:q.kind,box:q.box,from:q.from,...(e&&e.length?{emb:e,model:MODEL_TAG}:{})})}
+  its.push({id:p.id,name:p.name,price:p.price,category:p.category,unit:p.unit,notes:p.notes,photos})}
+ await applySnapshot({format:'visionbill-db',items:its,negs:E.model===MODEL_TAG?E.negs||[]:[],settings:S});$('#folderInfo').textContent=`📂 Loaded ${its.length} products from folder “${dir.name}”. Autosave is on.`;return true}
+function scheduleSave(){if(!dir||loadingSnap)return;clearTimeout(saveT);saveT=setTimeout(()=>saveToFolder().catch(e=>{console.error(e);$('#folderInfo').textContent='Folder save failed: '+e.message}),1500)}
+async function connectFolder(){try{dir=await window.showDirectoryPicker({id:'visionbill',mode:'readwrite'})}catch(e){return}await kvSet0('dirHandle',dir);
+ const has=await exists(dir,'products.json');if(has&&items.length&&!confirm(`Folder “${dir.name}” already has a saved database. Load it (replaces products in this browser)? Cancel = overwrite the folder with this browser's products.`)){await saveToFolder()}else await loadFromFolder();updateFolderUI()}
+function updateFolderUI(){$('#folderBtn').hidden=!hasFS;$('#folderBtn').textContent=dir?'📂 Change folder':'📂 Connect folder';if(!hasFS)$('#folderInfo').textContent='This browser can’t save to a folder (Chrome/Edge only) – use Export / Import.'}
+async function initFolder(){if(!hasFS)return updateFolderUI();const h=await kvGet('dirHandle');if(!h)return updateFolderUI();
+ const ok=async()=>{dir=h;await loadFromFolder();updateFolderUI()};
+ if(await h.queryPermission({mode:'readwrite'})==='granted')return ok();
+ $('#folderInfo').innerHTML='';const b=document.createElement('button');b.className='primary';b.textContent=`🔓 Reconnect folder “${h.name}”`;b.onclick=async()=>{if(await h.requestPermission({mode:'readwrite'})==='granted'){b.remove();await ok()}};$('#folderInfo').append(b);updateFolderUI()}
+$('#folderBtn').onclick=connectFolder;window.VB.useDir=async h=>{dir=h;await kvSet0('dirHandle',h);await saveToFolder();updateFolderUI()};
+$('#exportBtn').onclick=async()=>{const s=await snapshot();s.items.forEach(it=>it.photos.forEach(p=>{if(p.emb)p.emb=p.emb.map(v=>v.map(r4))}));s.negs=s.negs.map(v=>v.map(r4));
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(s)],{type:'application/json'}));a.download=`visionbill-db-${new Date().toISOString().slice(0,10)}.json`;document.body.append(a);a.click();a.remove()};
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const s=JSON.parse(await f.text());if(items.length&&!confirm(`Replace ${items.length} products in this browser with ${s.items.length} from the file?`))return;await applySnapshot(s);scheduleSave();$('#folderInfo').textContent=`✔ Imported ${s.items.length} products from ${f.name}`}catch(err){alert('Import failed: '+err.message)}};
 // ---------- init ----------
 (async()=>{await openDB();bill=JSON.parse(localStorage.getItem('vb_bill')||'[]');$('#gst').value=localStorage.getItem('vb_gst')||0;
  $('#thr').value=localStorage.getItem('vb_thr2')||0.55;$('#thrVal').textContent=(+$('#thr').value).toFixed(2);$('#showUnknown').checked=localStorage.getItem('vb_showU')!=='0';
- negs=(await kvGet('negs'))||[];if(negs[0]&&negs[0].length!==EMB_DIM)negs=[];await refresh();
+ negs=(await kvGet('negs'))||[];if(negs[0]&&negs[0].length!==EMB_DIM)negs=[];await refresh();await initFolder().catch(e=>console.warn('folder',e));
  try{status('Loading AI models…');await loadModels();status('Ready ✔');queue(()=>trainAll())}catch(e){console.error(e);status('Model load failed: '+e.message)}})();
