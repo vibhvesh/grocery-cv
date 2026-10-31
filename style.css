@@ -25,3 +25,6 @@ td input{width:70px}.totals{text-align:right;line-height:2}.totals input{width:7
 .tag{font-size:.75rem;color:#9a3412;font-weight:600}details{margin:6px 0}summary{cursor:pointer}.bar{height:6px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;background:#16a34a;width:0}
 .tip{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:8px 10px;font-size:.9rem}
 .samples{background:#f0fdf4;border:1px solid #bbf7d0}
+.det{display:block}.dhead{display:flex;gap:8px;align-items:flex-start}.dthumb{width:72px;height:72px;border-radius:8px;object-fit:cover;flex:none}.dmain{flex:1;min-width:0}.qty{width:56px!important}
+.small{font-size:.8rem}.chip.pick{border:1px solid #bbf7d0;cursor:pointer;font-size:.8rem;padding:3px 10px;background:#f0fdf4;color:#14532d}.chip.pick.on{background:#16a34a;color:#fff}
+.picker{border:1px dashed #94a3b8;border-radius:10px;padding:8px;margin-top:6px;background:#fff}.plist{max-height:180px;overflow:auto;margin:6px 0}.det .acts{margin-top:6px}

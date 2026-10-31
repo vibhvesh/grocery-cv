@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=6';
-const APP_VERSION='6',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=7';
+const APP_VERSION='7',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -12,7 +12,7 @@ const $=s=>document.querySelector(s);let T,det,fe,items=[],negs=[],bank=[],pendi
 window.VB={get items(){return items},get scans(){return scans},get ready(){return !!(det&&fe)}};
 const EMB_DIM=384,inr=n=>'₹'+(+n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const status=t=>$('#status').textContent=t,esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const thr=()=>+$('#thr').value,NIDB='Not in database',nameOf=id=>id==='unknown'?NIDB:(items.find(i=>i.id==id)||{}).name||'?';
+const MARGIN=0.02,thr=()=>+$('#thr').value,NIDB='Not in database',nameOf=id=>id==='unknown'?NIDB:(items.find(i=>i.id==id)||{}).name||'?';
 const queue=fn=>busy=busy.then(fn).catch(e=>{console.error(e);status('Error: '+e.message)});
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button,.tab').forEach(e=>e.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active')});
 const loadImg=src=>new Promise((a,b)=>{const i=new Image();i.onload=()=>a(i);i.onerror=b;i.src=src});
@@ -70,18 +70,25 @@ async function refresh(){items=(await getItems()).map(i=>({...i,photos:(i.photos
  $('#itemList').querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(confirm('Delete product?')){await delItem(b.dataset.d);await refresh();reclassifyScans()}});
  $('#manualItem').innerHTML=items.map(i=>`<option value="${i.id}">${esc(i.name)} (${inr(i.price)})</option>`).join('');renderBill()}
 // ---------- active learning from crops ----------
-async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({src:d.crop,kind:'crop',emb:await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),model:MODEL_TAG,thumb:d.crop,from:kind});
+async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({src:d.crop,kind:'crop',emb:d.es?d.es.slice(0,12):await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),model:MODEL_TAG,thumb:d.crop,from:kind});
  await putItem(it);await refresh();reclassifyScans()}
-async function newProductFromCrop(d){const name=prompt('New product name:');if(!name)return;const price=+prompt(`Price of ${name} in ₹:`,'0')||0;
- const it={id:crypto.randomUUID(),name:name.trim(),price,category:'',unit:'',notes:'',photos:[]};await putItem(it);items.push(it);await addCropTo(it.id,d,'new');d.id=it.id;d.manual=true;renderScans()}
-function reclassifyScans(){for(const sc of scans)for(const d of sc.dets){if(d.manual&&items.find(i=>i.id==d.id))continue;Object.assign(d,V.classify(bank,d.e,thr()))}renderScans()}
+function setLabel(d,id){d.id=id;d.manual=true;d.open=false;renderScans();if(id!=='unknown')queue(()=>addCropTo(id,d,'correction'))}
+async function newProductFromCrop(d,name,price){if(!name){name=prompt('New product name:');if(!name)return;price=+prompt(`Price of ${name} in ₹:`,'0')||0}
+ const it={id:crypto.randomUUID(),name:name.trim(),price,category:'',unit:'',notes:'',photos:[]};await putItem(it);items.push(it);d.id=it.id;d.manual=true;d.open=false;await addCropTo(it.id,d,'new');renderScans()}
+function reclassifyScans(){for(const sc of scans)for(const d of sc.dets){const r=V.decide(V.scoreViews(bank,d.es),thr(),MARGIN);if(d.manual&&items.find(i=>i.id==d.id)){d.top3=r.top3;continue}Object.assign(d,r)}renderScans()}
 // ---------- scanning ----------
-async function scanCanvas(cv){const t0=performance.now();status('Step 1/2: finding items…');const R=raw(cv);
- const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});const sc={cv,dets:[],sel:-1};
- status(`Step 2/2: recognising ${boxes.length} crops…`);
- for(const b of boxes){const d=await makeDet(cv,R,b.box);if(b.big&&d.id==='unknown')continue;sc.dets.push(d)}
+async function scanCanvas(cv,full){full=full||cv;const t0=performance.now();status('Step 1/2: finding items…');const R=raw(cv);
+ const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});const sc={cv,full,dets:[],sel:-1};
+ let k=0;for(const b of boxes){status(`Step 2/2: closer look at item ${++k}/${boxes.length}…`);const d=await makeDet(sc,b.box);if(b.big&&d.id==='unknown')continue;sc.dets.push(d)}
  sc.dets=V.dedupe(sc.dets);sc.ms=Math.round(performance.now()-t0);scans.push(sc);renderScans();status('Ready ✔')}
-async function makeDet(cv,R,box){const [e]=await V.embedCrop(fe,R,box);return{box,e,crop:cropURL(cv,box),...V.classify(bank,e,thr())}}
+// views of one crop from the ORIGINAL full-resolution image: padded + tight crop, 4 rotations, flip, centre crop
+function viewCanvases(full,box,s){const [x,y,w,h]=box.map(v=>v*s),out=[];
+ const sq=(pad,zoom=1)=>{const S=Math.max(w,h)*(1+2*pad)*zoom,cx=x+w/2,cy=y+h/2,c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.fillStyle='#d7d4d0';g.fillRect(0,0,224,224);g.drawImage(full,cx-S/2,cy-S/2,S,S,0,0,224,224);return c};
+ const tf=(src,rot,flip)=>{const c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.translate(112,112);g.rotate(rot*Math.PI/2);if(flip)g.scale(-1,1);g.drawImage(src,-112,-112);return c};
+ for(const pad of [0.1,0.02]){const c=sq(pad);for(let r=0;r<4;r++)out.push(tf(c,r,false));out.push(tf(c,0,true))}
+ out.push(sq(0.1,0.8));return $('#closer').checked?out:[out[0]]}
+async function makeDet(sc,box){const s=sc.full.width/sc.cv.width,es=[];for(const v of viewCanvases(sc.full,box,s))es.push(await V.embed(fe,raw(v)));
+ const r=V.decide(V.scoreViews(bank,es),thr(),MARGIN);return{box,es,crop:cropURL(sc.full,box.map(v=>v*s)),...r}}
 const COLORS=['#2563eb','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#0f766e'];
 function renderScans(){const root=$('#scanResults');root.innerHTML='';const showU=$('#showUnknown').checked;
  scans.forEach((sc,si)=>{const wrap=document.createElement('div');wrap.className='scanimg';const W=sc.cv.width,H=sc.cv.height;
@@ -91,14 +98,24 @@ function renderScans(){const root=$('#scanResults');root.innerHTML='';const show
   cv.onpointerdown=e=>{start=pt(e);cv.setPointerCapture(e.pointerId)};
   cv.onpointerup=e=>{if(!start)return;const p=pt(e),b=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.abs(p[0]-start[0]),Math.abs(p[1]-start[1])];const s0=start;start=null;
    if(b[2]<W/40||b[3]<H/40){sc.sel=sc.dets.findIndex(d=>s0[0]>=d.box[0]&&s0[0]<=d.box[0]+d.box[2]&&s0[1]>=d.box[1]&&s0[1]<=d.box[1]+d.box[3]);return renderScans()}
-   queue(async()=>{sc.dets.push(await makeDet(sc.cv,raw(sc.cv),b));renderScans()})};
+   queue(async()=>{const d=await makeDet(sc,b);d.manual=false;sc.dets.push(d);renderScans()})};
   wrap.append(cv);let hidden=0;
   sc.dets.forEach((d,i)=>{if(d.id==='unknown'&&!showU){hidden++;return}const unk=d.id==='unknown';const row=document.createElement('div');row.className='det'+(i==sc.sel?' sel':'')+(unk?' unk':'');
-   row.innerHTML=`<span class="n">${i+1}</span><img src="${d.crop}" width="56" height="56" style="border-radius:6px"><select><option value="unknown">❓ ${NIDB}</option>${items.map(it=>`<option value="${it.id}">${esc(it.name)}</option>`).join('')}</select><span class="conf ${unk?'low':''}" title="similarity to nearest training example${d.guess?' (closest: '+esc(nameOf(d.guess))+')':''}">${Math.round(d.conf*100)}%</span><input type="number" min="1" value="${d.qty||1}" style="width:52px"><div class="acts"><button data-a="new">➕ New product</button>${unk?'':`<button data-a="teach" title="save this crop as a training photo of ${esc(nameOf(d.id))}">💾 Add photo to ${esc(nameOf(d.id))}</button>`}<button data-a="del" title="delete box">🗑</button></div>${unk&&d.guess?`<span class="tag">closest: ${esc(nameOf(d.guess))}</span>`:''}`;
-   const sel=row.querySelector('select');sel.value=d.id;
-   sel.onchange=()=>{d.id=sel.value;d.manual=true;if(d.id!=='unknown')queue(()=>addCropTo(d.id,d,'correction'));renderScans()};
-   row.querySelector('input').onchange=e=>{d.qty=Math.max(1,+e.target.value||1);renderSummary()};
-   row.querySelector('[data-a=new]').onclick=()=>queue(()=>newProductFromCrop(d));
+   const pct=v=>Math.round(v*100)+'%',chips=(d.top3||[]).map(t=>`<button class="chip pick ${t.id===d.id?'on':''}" data-id="${t.id}">${esc(nameOf(t.id))} ${pct(t.s)}</button>`).join('');
+   row.innerHTML=`<div class="dhead"><span class="n">${i+1}</span><img src="${d.crop}" class="dthumb"><div class="dmain"><b>Item ${i+1}: ${unk?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span>${d.manual?' <span class="tag">✔ labelled</span>':''}
+    <div class="muted small">Top guesses: ${chips||'—'}</div></div><input type="number" min="1" value="${d.qty||1}" class="qty" title="quantity"></div>
+    <div class="acts"><button data-a="label" class="${unk?'primary':''}">${unk?'🏷️ Label it':'✏️ Wrong'}</button>${unk?'':`<button data-a="teach" title="save this crop as a training photo of ${esc(nameOf(d.id))}">💾 Correct – learn</button>`}<button data-a="del" title="delete box">🗑</button></div>
+    <div class="picker" ${d.open?'':'hidden'}><input class="psearch" placeholder="🔍 Search products…"><div class="plist">${items.map(it=>`<button class="chip pick" data-id="${it.id}" data-n="${esc(it.name.toLowerCase())}">${esc(it.name)} · ${inr(it.price)}</button>`).join('')}</div>
+     <div class="row"><input class="pnew" placeholder="Type new label (new product)"><input class="pprice" type="number" min="0" step="0.5" placeholder="₹ price" style="width:90px"><button class="primary" data-a="create">Save</button></div>
+     <div class="row"><button data-a="setunk">Mark as ${NIDB}</button><button data-a="close">Close</button></div></div>`;
+   row.querySelectorAll('.pick').forEach(b=>b.onclick=e=>{e.stopPropagation();setLabel(d,b.dataset.id)});
+   row.querySelector('.qty').onchange=e=>{d.qty=Math.max(1,+e.target.value||1);renderSummary()};
+   row.querySelector('[data-a=label]').onclick=()=>{d.open=!d.open;renderScans()};
+   row.querySelector('[data-a=close]').onclick=()=>{d.open=false;renderScans()};
+   row.querySelector('[data-a=setunk]').onclick=()=>{d.id='unknown';d.manual=true;d.open=false;renderScans()};
+   row.querySelector('.psearch').oninput=e=>{const q=e.target.value.toLowerCase();row.querySelectorAll('.plist .pick').forEach(b=>b.hidden=!b.dataset.n.includes(q))};
+   row.querySelector('[data-a=create]').onclick=()=>{const name=row.querySelector('.pnew').value.trim();if(!name)return row.querySelector('.pnew').focus();let price=row.querySelector('.pprice').value;
+    if(price===''){price=prompt(`Price of ${name} in ₹:`,'0');if(price===null)return}queue(()=>newProductFromCrop(d,name,+price||0))};
    const tb=row.querySelector('[data-a=teach]');if(tb)tb.onclick=()=>{tb.disabled=true;tb.textContent='✔ Saved';queue(()=>addCropTo(d.id,d,'confirm'))};
    row.querySelector('[data-a=del]').onclick=()=>{sc.dets.splice(i,1);sc.sel=-1;renderScans()};
    row.onclick=e=>{if(e.target===row||e.target.className=='n'){sc.sel=i;renderScans()}};wrap.append(row)});
@@ -107,14 +124,14 @@ function renderScans(){const root=$('#scanResults');root.innerHTML='';const show
 function counts(){const c={};scans.forEach(s=>s.dets.forEach(d=>c[d.id]=(c[d.id]||0)+(d.qty||1)));return c}
 function renderSummary(){const c=counts();$('#summaryBox').hidden=!scans.length;$('#summary').innerHTML=Object.entries(c).sort((a,b)=>(a[0]==='unknown')-(b[0]==='unknown')).map(([id,n])=>`<span class="chip ${id==='unknown'?'unk':''}">${esc(nameOf(id))} × ${n}</span>`).join('')||'<span class="muted">Nothing detected</span>'}
 $('#addAll').onclick=()=>{const c=counts();for(const [id,n] of Object.entries(c))if(id!=='unknown')addToBill(id,n);scans=[];renderScans()};
-$('#clearScans').onclick=()=>{scans=[];renderScans()};$('#showUnknown').onchange=()=>{localStorage.setItem('vb_showU',$('#showUnknown').checked?1:0);renderScans()};
+$('#clearScans').onclick=()=>{scans=[];renderScans()};$('#closer').checked=localStorage.getItem('vb_closer')!=='0';$('#closer').onchange=()=>localStorage.setItem('vb_closer',$('#closer').checked?1:0);$('#showUnknown').onchange=()=>{localStorage.setItem('vb_showU',$('#showUnknown').checked?1:0);renderScans()};
 $('#thr').oninput=()=>{$('#thrVal').textContent=(+$('#thr').value).toFixed(2);localStorage.setItem('vb_thr2',$('#thr').value);reclassifyScans()};
 $('#hiAcc').onchange=()=>{localStorage.setItem('vb_hi',$('#hiAcc').checked?1:0);if(confirm('Reload now to switch detector?'))location.reload()};
 const needModels=()=>{if(!det){alert('Models are still loading…');return true}};
-$('#billPhotos').onchange=async e=>{if(needModels())return;const fs=[...e.target.files];e.target.value='';for(const f of fs){const cv=toCanvas(await loadImg(URL.createObjectURL(f)));queue(()=>scanCanvas(cv))}};
+$('#billPhotos').onchange=async e=>{if(needModels())return;const fs=[...e.target.files];e.target.value='';for(const f of fs){const im=await loadImg(URL.createObjectURL(f));const cv=toCanvas(im),full=toCanvas(im,3072);queue(()=>scanCanvas(cv,full))}};
 let stream;$('#camBtn').onclick=async()=>{const v=$('#cam');if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;v.hidden=$('#snapBtn').hidden=true;return}
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}});v.srcObject=stream;await v.play();v.hidden=$('#snapBtn').hidden=false}catch(err){alert('Camera unavailable: '+err.message)}};
-$('#snapBtn').onclick=()=>{if(needModels())return;const cv=toCanvas($('#cam'));queue(()=>scanCanvas(cv))};
+$('#snapBtn').onclick=()=>{if(needModels())return;const cv=toCanvas($('#cam')),full=toCanvas($('#cam'),3072);queue(()=>scanCanvas(cv,full))};
 // ---------- bill ----------
 function addToBill(id,q){const l=bill.find(b=>b.id==id);l?l.qty+=q:bill.push({id,qty:q});saveBill()}
 function saveBill(){localStorage.setItem('vb_bill',JSON.stringify(bill));localStorage.setItem('vb_gst',$('#gst').value);renderBill()}

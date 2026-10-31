@@ -64,9 +64,14 @@ export async function segment(det,img,{extra=[],minScore=0.1,maxArea=0.6}={}){
 // post-classification cleanup: merge fragments/parts of one item, keep separate copies of the same product
 export function dedupe(ds){const area=d=>d.box[2]*d.box[3];let r=[...ds].sort((a,b)=>area(b)-area(a)),changed=true;
  while(changed){changed=false;outer:for(let i=0;i<r.length;i++)for(let j=i+1;j<r.length;j++){const a=r[i],b=r[j],o=iou(a.box,b.box);
-  const nested=o.inA>0.75,sameish=a.id===b.id||a.id==='unknown'||b.id==='unknown';
+  const nested=o.inA>0.75,sameish=a.id===b.id||a.id==='unknown'||b.id==='unknown'||o.iou>0.5||(nested&&o.inA>0.85);
   if((nested&&sameish)||(a.id===b.id&&o.cont>0.4)||(sameish&&o.iou>0.5)){
    if(a.id==='unknown'&&b.id!=='unknown'){a.id=b.id;a.conf=b.conf;a.guess=b.guess}
    if(a.id===b.id&&!nested){const x=Math.min(a.box[0],b.box[0]),y=Math.min(a.box[1],b.box[1]);a.box=[x,y,Math.max(a.box[0]+a.box[2],b.box[0]+b.box[2])-x,Math.max(a.box[1]+a.box[3],b.box[1]+b.box[3])-y]}
    r.splice(j,1);changed=true;break outer}}}
  return r.sort((a,b)=>a.box[1]-b.box[1]||a.box[0]-b.box[0])}
+// v7 "closer look": average per-class best similarity over many views of one crop
+export function scoreViews(bank,es){const acc={};for(const e of es){const best={};for(const {l,e:b} of bank){let s=0;for(let i=0;i<b.length;i++)s+=b[i]*e[i];if(!(l in best)||s>best[l])best[l]=s}for(const [l,s] of Object.entries(best))acc[l]=(acc[l]||0)+s/es.length}
+ const bg=acc[BG]??-1;delete acc[BG];return{ranked:Object.entries(acc).sort((a,b)=>b[1]-a[1]).map(([id,s])=>({id,s})),bg}}
+export function decide({ranked,bg},thr=0.55,minMargin=0.02){if(!ranked.length)return{id:'unknown',conf:0,guess:null,margin:0,top3:[]};const [a,b]=ranked,margin=a.s-(b?b.s:0);
+ const ok=a.s>=thr&&margin>=minMargin&&a.s>bg+0.02;return{id:ok?a.id:'unknown',conf:a.s,guess:a.id,margin,top3:ranked.slice(0,3)}}
