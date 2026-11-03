@@ -1,10 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=9">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=10">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v9</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v10</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
  <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div>
@@ -28,14 +28,15 @@
   <details><summary class="muted">Settings</summary>
    <label class="chk"><input type="checkbox" id="showUnknown" checked> Show “Not in database” items</label>
    <label class="chk"><input type="checkbox" id="closer" checked> Closer look: extra zoomed views for uncertain items (full-resolution crops)</label>
+   <label class="chk"><input type="checkbox" id="ocr"> Also read printed text on unsure packets (OCR, ≈4 MB once, ~1 s per unsure item)</label>
    <label class="chk"><input type="checkbox" id="hiAcc"> High-recall detector (OWLv2, slower, +155 MB once)</label>
    <label>Match threshold (min similarity): <b id="thrVal">0.50</b><input id="thr" type="range" min="0.3" max="0.9" step="0.01" value="0.5"></label>
    <div class="muted" id="engineInfo"></div></details>
   <video id="cam" playsinline hidden></video>
   <p class="tip">📸 Best results: put items on a <b>plain light tray or sheet</b>, shoot <b>straight from above</b> in even light, and leave a small gap between items.</p>
-  <p class="muted">Step 1 finds &amp; crops every item, Step 2 recognises each crop. Teach unknown crops with <b>➕ New product</b>, or pick the right product in the dropdown (saved as training automatically). Drag on a photo to draw a missed item.</p>
+  <p class="muted">Step 1 finds &amp; crops every item, Step 2 suggests what each one is (shape, texture and colour; optionally printed text). Nothing is billed until you confirm: tap ✔ Yes, pick another guess, or ✏️ Something else – every answer is saved as training. Teach unknown crops with <b>➕ New product</b>, or pick the right product in the dropdown (saved as training automatically). Drag on a photo to draw a missed item.</p>
   <div id="scanResults"></div>
-  <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div>
+  <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="confirmAll" class="primary" hidden>✔ Confirm all</button><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div>
  <div class="card printable"><div class="row between"><h2>Bill</h2><span class="muted" id="billDate"></span></div>
   <div class="tablewrap"><table id="billTable"><thead><tr><th>Item</th><th>Qty</th><th>Unit ₹</th><th>Total ₹</th><th class="np"></th></tr></thead><tbody></tbody></table></div>
   <div class="row np"><select id="manualItem"></select><button id="addManual">+ Add manually</button></div>
@@ -45,4 +46,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js?v=9"></script></body></html>
+<script type="module" src="app.js?v=10"></script></body></html>

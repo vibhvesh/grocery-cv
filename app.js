@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=9';
-const APP_VERSION='9',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=10';
+const APP_VERSION='10',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -35,7 +35,7 @@ async function loadModels(){const hi=localStorage.getItem('vb_hi')==='1';$('#hiA
  if(!det)[det,fe]=await tryLoad('wasm');
  $('#engineInfo').textContent=`Detector: ${detId.split('/')[1]} · Embeddings: dinov2-small · Backend: ${device} · loaded in ${((performance.now()-t0)/1000).toFixed(1)}s`;window.VB.device=device}
 // ---------- training data (incremental) ----------
-function rebuildBank(){bank=[];for(const it of items)for(const p of it.photos)for(const e of p.emb||[])bank.push({l:it.id,e});for(const e of negs)bank.push({l:V.BG,e})}
+let cols={};function rebuildBank(){bank=[];cols={};for(const it of items)cols[it.id]=it.photos.map(p=>p.col).filter(Boolean);for(const it of items)for(const p of it.photos)for(const e of p.emb||[])bank.push({l:it.id,e});for(const e of negs)bank.push({l:V.BG,e})}
 async function embedPhoto(it,p){const im=await loadImg(p.src),cv=toCanvas(im);
  if(p.kind==='crop'){p.emb=await V.embedCrop(fe,raw(cv),[0,0,cv.width,cv.height],true);p.model=MODEL_TAG;p.thumb=p.src;return}
  const r=await V.trainPhoto(det,fe,raw(cv),{name:it.name});p.emb=r.pos;p.model=MODEL_TAG;p.box=r.box;p.thumb=cropURL(cv,r.box,0.1,128);
@@ -43,7 +43,10 @@ async function embedPhoto(it,p){const im=await loadImg(p.src),cv=toCanvas(im);
  const kept=r.neg.filter(e=>V.classify(bank.filter(b=>b.l!==V.BG),e,0).conf<0.8);negs.push(...kept);if(negs.length>400)negs=negs.slice(-400);await kvSet('negs',negs)}
 async function trainItem(it,force=false){let n=0;for(const p of it.photos)if(force||!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)||(p.model&&p.model!==MODEL_TAG)){$('#trainInfo').textContent=`Learning ${it.name}: photo ${++n}…`;await embedPhoto(it,p)}
  if(n){await putItem(it);rebuildBank();reclassifyScans()}return n}
-async function trainAll(force=false){if(!det)return;if(force){negs=[];await kvSet('negs',negs)}let n=0,k=0;const todo=items.filter(it=>force||it.photos.some(p=>!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)||(p.model&&p.model!==MODEL_TAG)));
+async function ensureColours(){let n=0;for(const it of items){let ch=false;for(const p of it.photos)if(!p.col&&p.src){try{p.col=await colOfSrc(p.kind==='crop'?p.src:(p.thumb||p.src));ch=true;n++}catch{}}if(ch)await putItem0(it)}if(n){scheduleSave();rebuildBank()}return n}
+async function colOfSrc(src){const im=await loadImg(src),c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.drawImage(im,0,0,224,224);return colOfCanvas(c)}
+function colOfCanvas(c){const d=c.getContext('2d').getImageData(0,0,224,224);return V.colourHist(d.data,224,224,4,V.INNER224)}
+async function trainAll(force=false){if(!det)return;await ensureColours();if(force){negs=[];await kvSet('negs',negs)}let n=0,k=0;const todo=items.filter(it=>force||it.photos.some(p=>!p.emb||(p.emb[0]&&p.emb[0].length!==EMB_DIM)||(p.model&&p.model!==MODEL_TAG)));
  for(const it of todo){status(`Learning ${k+1}/${todo.length}…`);$('#trainInfo').textContent=`Learning product ${++k}/${todo.length}: ${it.name}…`;n+=await trainItem(it,force);await refresh()}status('Ready ✔');if(todo.length&&/Added/.test($('#samplesInfo').textContent))$('#samplesInfo').textContent='✔ Sample products learned – open Billing and scan a photo.';
  $('#trainInfo').textContent=`Model: ${bank.filter(b=>b.l!==V.BG).length} product embeddings from ${items.reduce((s,i)=>s+i.photos.length,0)} photos · ${negs.length} background examples. Updates automatically.`}
 $('#samplesBtn').onclick=async()=>{const btn=$('#samplesBtn'),info=$('#samplesInfo');btn.disabled=true;
@@ -71,12 +74,13 @@ async function refresh(){items=(await getItems()).map(i=>({...i,photos:(i.photos
  $('#itemList').querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(confirm('Delete product?')){await delItem(b.dataset.d);await refresh();reclassifyScans()}});
  $('#manualItem').innerHTML=items.map(i=>`<option value="${i.id}">${esc(i.name)} (${inr(i.price)})</option>`).join('');renderBill()}
 // ---------- active learning from crops ----------
-async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({src:d.crop,kind:'crop',emb:d.es?d.es.slice(0,12):await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),model:MODEL_TAG,thumb:d.crop,from:kind});
+async function addCropTo(id,d,kind='crop'){const it=items.find(i=>i.id==id);if(!it)return;it.photos.push({col:d.col||null,words:wordsOf(d.text),src:d.crop,kind:'crop',emb:d.es?d.es.slice(0,12):await V.embedCrop(fe,raw(toCanvas(await loadImg(d.crop))),[0,0,224,224],true),model:MODEL_TAG,thumb:d.crop,from:kind});
  await putItem(it);await refresh();reclassifyScans()}
-function setLabel(d,id){d.id=id;d.manual=true;d.open=false;renderScans();if(id!=='unknown')queue(()=>addCropTo(id,d,'correction'))}
+// every confirmation or correction is saved as a training crop (embedding + colour + read words)
+function setLabel(d,id,render=true){const was=d.guess;d.id=id;d.manual=true;d.open=false;if(render)renderScans();if(id!=='unknown')queue(()=>addCropTo(id,d,id===was?'confirm':'correction'))}
 async function newProductFromCrop(d,name,price){if(!name){name=prompt('New product name:');if(!name)return;price=+prompt(`Price of ${name} in ₹:`,'0')||0}
  const it={id:crypto.randomUUID(),name:name.trim(),price,category:'',unit:'',notes:'',photos:[]};await putItem(it);items.push(it);d.id=it.id;d.manual=true;d.open=false;await addCropTo(it.id,d,'new');renderScans()}
-function reclassifyScans(){for(const sc of scans)for(const d of sc.dets){const r=V.decide(V.scoreViews(bank,d.es),thr(),MARGIN);if(d.manual&&items.find(i=>i.id==d.id)){d.top3=r.top3;continue}Object.assign(d,r)}renderScans()}
+function reclassifyScans(){for(const sc of scans)for(const d of sc.dets){const r=V.decideFused(V.scoreViews(bank,d.es),cols,d.col,d.ocr||{},thr(),MARGIN);if(d.manual&&items.find(i=>i.id==d.id)){d.top3=r.top3;continue}Object.assign(d,r)}renderScans()}
 // ---------- scanning ----------
 async function scanCanvas(cv,full,tDecode=0){full=full||cv;const T0=performance.now(),tm={decode:Math.round(tDecode)};status('Step 1/2: finding items…');const R=raw(cv);
  const boxes=await V.segment(det,R,{extra:items.map(i=>i.name)});tm.detect=Math.round(performance.now()-T0);
@@ -84,20 +88,28 @@ async function scanCanvas(cv,full,tDecode=0){full=full||cv;const T0=performance.
  // pass 1 (fast): one padded full-res crop per item, all embedded in one batched call
  const s=full.width/cv.width;let t=performance.now();const v1=boxes.map(b=>viewCanvases(full,b.box,s,'fast')[0]);
  status(`Step 2/2: recognising ${boxes.length} items…`);const e1=await V.embedBatch(fe,v1.map(raw));tm.pass1=Math.round(performance.now()-t);
- let ds=boxes.map((b,i)=>{const es=[e1[i]];const r=V.decide(V.scoreViews(bank,es),thr(),MARGIN);return{box:b.box,big:b.big,es,crop:cropURL(full,b.box.map(v=>v*s)),...r}});
- sc.dets=V.dedupe(ds.filter(d=>!(d.big&&d.id==='unknown')));sc.pending=0;renderScans();
+ let ds=boxes.map((b,i)=>{const es=[e1[i]];const col=colOfCanvas(v1[i]);const r=V.decideFused(V.scoreViews(bank,es),cols,col,{},thr(),MARGIN);return{box:b.box,col,big:b.big,es,crop:cropURL(full,b.box.map(v=>v*s)),...r}});
+ sc.dets=V.mergeSame(V.dedupe(ds.filter(d=>!(d.big&&d.id==='unknown'))));sc.pending=0;renderScans();
  // pass 2 (closer look) only for uncertain items: +6 views (3 rotations, flip, tight crop, centre zoom)
  t=performance.now();const thorough=false,nx=6;const unsure=!$('#closer').checked?[]:sc.dets.filter(d=>d.conf<0.7||d.margin<0.05);
  if(unsure.length){status(`Closer look at ${unsure.length} uncertain item(s)…`);const vs=unsure.flatMap(d=>viewCanvases(full,d.box,s,thorough?'thorough':'extra'));const e2=await V.embedBatch(fe,vs.map(raw));
-  unsure.forEach((d,i)=>{d.es=[...d.es,...e2.slice(i*nx,i*nx+nx)];const r=V.decide(V.scoreViews(bank,d.es),thr(),MARGIN);if(!d.manual)Object.assign(d,r);else d.top3=r.top3;d.closer=true});sc.dets=V.dedupe(sc.dets)}
+  unsure.forEach((d,i)=>{d.es=[...d.es,...e2.slice(i*nx,i*nx+nx)];const r=V.decideFused(V.scoreViews(bank,d.es),cols,d.col,d.ocr||{},thr(),MARGIN);if(!d.manual)Object.assign(d,r);else d.top3=r.top3;d.closer=true});sc.dets=V.mergeSame(V.dedupe(sc.dets))}
+ if($('#ocr').checked){const still=sc.dets.filter(d=>!d.manual&&(d.id==='unknown'||d.margin<0.05));if(still.length){t=performance.now();status(`Reading packet text on ${still.length} item(s)…`);await ocrDets(sc,still);tm.ocr=Math.round(performance.now()-t)}}
  tm.pass2=Math.round(performance.now()-t);tm.unsure=unsure.length;sc.ms=Math.round(performance.now()-T0+tDecode);renderScans();status('Ready ✔')}
+// optional printed-text cue (tesseract.js, loaded only when enabled): words from product names + words read on confirmed crops
+let ocrW=null;async function ocrWorker(){if(ocrW)return ocrW;status('Loading text reader (≈4 MB, once)…');const Ts=(await import('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js')).default;ocrW=await Ts.createWorker('eng');await ocrW.setParameters({tessedit_pageseg_mode:'11'});return ocrW}
+const GENERIC=new Set(['BLACK','SALT','PACK','PREMIUM','PACKET','POUCH','WITH','FROM','ONLY','NEW']);
+function vocab(){const v={};for(const it of items){const w=new Set(it.name.toUpperCase().replace(/[^A-Z ]/g,' ').split(/\s+/).filter(x=>x.length>=4&&!GENERIC.has(x)));for(const p of it.photos)for(const x of p.words||[])w.add(x);v[it.id]=[...w]}return v}
+async function ocrText(full,box,s){const [x,y,w,h]=box.map(v=>v*s),W=await ocrWorker();const out=[];for(const r of [0,1,2,3]){const k=Math.min(1,640/Math.max(w,h)),c=document.createElement('canvas'),sw=r%2?h*k:w*k,sh=r%2?w*k:h*k;c.width=sw;c.height=sh;const g=c.getContext('2d');g.filter='grayscale(1) contrast(1.4)';g.translate(sw/2,sh/2);g.rotate(r*Math.PI/2);g.drawImage(full,x,y,w,h,-w*k/2,-h*k/2,w*k,h*k);const {data}=await W.recognize(c);out.push((data.words||[]).filter(q=>q.confidence>50).map(q=>q.text).join(' '))}return out.join(' ')}
+async function ocrDets(sc,ds){const s=sc.full.width/sc.cv.width,voc=vocab();for(const d of ds){try{d.text=await ocrText(sc.full,d.box,s);d.ocr=V.ocrHits(d.text,voc);if(!d.manual)Object.assign(d,V.decideFused(V.scoreViews(bank,d.es),cols,d.col,d.ocr,thr(),MARGIN))}catch(e){console.warn('ocr',e)}}renderScans()}
+const wordsOf=t=>[...new Set((String(t||'').toUpperCase().match(/[A-Z]{4,}/g)||[]).filter(x=>!GENERIC.has(x)))].slice(0,20);
 // views of one crop from the ORIGINAL (full-res) image
 function viewCanvases(full,box,s,mode='fast'){const [x,y,w,h]=box.map(v=>v*s),out=[];
- const sq=(pad,zoom=1)=>{const S=Math.max(w,h)*(1+2*pad)*zoom,cx=x+w/2,cy=y+h/2,c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.fillStyle='#d7d4d0';g.fillRect(0,0,224,224);g.drawImage(full,cx-S/2,cy-S/2,S,S,0,0,224,224);return c};
+ const sq=(pad,zoom=1)=>{const S=Math.max(w,h)*(1+2*pad)*zoom,cx=x+w/2,cy=y+h/2,c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.fillStyle='#d7d4d0';g.fillRect(0,0,224,224);const k=224/S,m=0.03;g.save();g.beginPath();g.rect((x-m*w-(cx-S/2))*k,(y-m*h-(cy-S/2))*k,w*(1+2*m)*k,h*(1+2*m)*k);g.clip();g.drawImage(full,cx-S/2,cy-S/2,S,S,0,0,224,224);g.restore();return c};
  const tf=(src,rot,flip)=>{const c=document.createElement('canvas');c.width=c.height=224;const g=c.getContext('2d');g.translate(112,112);g.rotate(rot*Math.PI/2);if(flip)g.scale(-1,1);g.drawImage(src,-112,-112);return c};
  if(mode==='fast')return[sq(0.1)];if(mode==='thorough'){const o=[];for(const pad of [0.1,0.02]){const c=sq(pad);for(let r=0;r<4;r++)if(pad!==0.1||r)o.push(tf(c,r,false));o.push(tf(c,0,true))}o.push(sq(0.1,0.8));return o}const c=sq(0.1),t=sq(0.02);return[tf(c,1,false),tf(c,2,false),tf(c,3,false),tf(c,0,true),t,sq(0.1,0.8)]}
 async function makeDet(sc,box){const s=sc.full.width/sc.cv.width;const vs=[...viewCanvases(sc.full,box,s,'fast'),...viewCanvases(sc.full,box,s,'extra')];const es=await V.embedBatch(fe,vs.map(raw));
- const r=V.decide(V.scoreViews(bank,es),thr(),MARGIN);return{box,es,crop:cropURL(sc.full,box.map(v=>v*s)),...r}}
+ const col=colOfCanvas(vs[0]);const r=V.decideFused(V.scoreViews(bank,es),cols,col,{},thr(),MARGIN);return{box,es,col,crop:cropURL(sc.full,box.map(v=>v*s)),...r}}
 const COLORS=['#2563eb','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#0f766e'];
 function renderScans(){const root=$('#scanResults');root.innerHTML='';const showU=$('#showUnknown').checked;
  scans.forEach((sc,si)=>{const wrap=document.createElement('div');wrap.className='scanimg';const W=sc.cv.width,H=sc.cv.height;
@@ -111,9 +123,10 @@ function renderScans(){const root=$('#scanResults');root.innerHTML='';const show
   wrap.append(cv);let hidden=0;
   sc.dets.forEach((d,i)=>{if(d.id==='unknown'&&!showU){hidden++;return}const unk=d.id==='unknown';const row=document.createElement('div');row.className='det'+(i==sc.sel?' sel':'')+(unk?' unk':'');
    const pct=v=>Math.round(v*100)+'%',chips=(d.top3||[]).map(t=>`<button class="chip pick ${t.id===d.id?'on':''}" data-id="${t.id}">${esc(nameOf(t.id))} ${pct(t.s)}</button>`).join('');
-   row.innerHTML=`<div class="dhead"><span class="n">${i+1}</span><img src="${d.crop}" class="dthumb"><div class="dmain"><b>Item ${i+1}: ${unk?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span>${d.manual?' <span class="tag">✔ labelled</span>':''}
-    <div class="muted small">Top guesses: ${chips||'—'}</div></div><input type="number" min="1" value="${d.qty||1}" class="qty" title="quantity"></div>
-    <div class="acts"><button data-a="label" class="${unk?'primary':''}">${unk?'🏷️ Label it':'✏️ Wrong'}</button>${unk?'':`<button data-a="teach" title="save this crop as a training photo of ${esc(nameOf(d.id))}">💾 Correct – learn</button>`}<button data-a="del" title="delete box">🗑</button></div>
+   const sugg=d.manual?d.id:(d.id!=='unknown'?d.id:d.guess),sname=sugg&&sugg!=='unknown'?esc(nameOf(sugg)):NIDB;
+   row.innerHTML=`<div class="dhead"><span class="n">${i+1}</span><img src="${d.crop}" class="dthumb"><div class="dmain">${d.manual?`<b>Item ${i+1}: ${d.id==='unknown'?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="tag">✔ confirmed</span>`:`<b>Item ${i+1}: ${unk?'not sure – maybe':'I think this is'} ${sname}?</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span> <span class="tag ask">needs your OK</span>`}
+    <div class="muted small">Top guesses (tap the right one): ${chips||'—'}${d.text?` · text read: “${esc(d.text.slice(0,40))}”`:''}</div></div><input type="number" min="1" value="${d.qty||1}" class="qty" title="quantity"></div>
+    <div class="acts">${!d.manual&&sugg&&sugg!=='unknown'?`<button data-a="yes" class="primary">✔ Yes, ${sname}</button>`:''}<button data-a="label">${d.manual?'✏️ Change':'✏️ Something else'}</button><button data-a="del" title="delete box">🗑</button></div>
     <div class="picker" ${d.open?'':'hidden'}><input class="psearch" placeholder="🔍 Search products…"><div class="plist">${items.map(it=>`<button class="chip pick" data-id="${it.id}" data-n="${esc(it.name.toLowerCase())}">${esc(it.name)} · ${inr(it.price)}</button>`).join('')}</div>
      <div class="row"><input class="pnew" placeholder="Type new label (new product)"><input class="pprice" type="number" min="0" step="0.5" placeholder="₹ price" style="width:90px"><button class="primary" data-a="create">Save</button></div>
      <div class="row"><button data-a="setunk">Mark as ${NIDB}</button><button data-a="close">Close</button></div></div>`;
@@ -125,15 +138,17 @@ function renderScans(){const root=$('#scanResults');root.innerHTML='';const show
    row.querySelector('.psearch').oninput=e=>{const q=e.target.value.toLowerCase();row.querySelectorAll('.plist .pick').forEach(b=>b.hidden=!b.dataset.n.includes(q))};
    row.querySelector('[data-a=create]').onclick=()=>{const name=row.querySelector('.pnew').value.trim();if(!name)return row.querySelector('.pnew').focus();let price=row.querySelector('.pprice').value;
     if(price===''){price=prompt(`Price of ${name} in ₹:`,'0');if(price===null)return}queue(()=>newProductFromCrop(d,name,+price||0))};
-   const tb=row.querySelector('[data-a=teach]');if(tb)tb.onclick=()=>{tb.disabled=true;tb.textContent='✔ Saved';queue(()=>addCropTo(d.id,d,'confirm'))};
+   const yb=row.querySelector('[data-a=yes]');if(yb)yb.onclick=()=>setLabel(d,sugg);
    row.querySelector('[data-a=del]').onclick=()=>{sc.dets.splice(i,1);sc.sel=-1;renderScans()};
    row.onclick=e=>{if(e.target===row||e.target.className=='n'){sc.sel=i;renderScans()}};wrap.append(row)});
   const ctl=document.createElement('div');ctl.className='row';ctl.innerHTML=`<span class="muted">${sc.dets.length} item(s) found${hidden?`, ${hidden} not-in-database hidden`:''} · ${sc.ms} ms${sc.tm?` (decode ${sc.tm.decode}, find ${sc.tm.detect}, recognise ${sc.tm.pass1}, closer look ${sc.tm.pass2} ms on ${sc.tm.unsure})`:''}</span><button>Remove photo</button>`;ctl.querySelector('button').onclick=()=>{scans.splice(si,1);renderScans()};wrap.append(ctl);root.append(wrap)});
  renderSummary()}
-function counts(){const c={};scans.forEach(s=>s.dets.forEach(d=>c[d.id]=(c[d.id]||0)+(d.qty||1)));return c}
-function renderSummary(){const c=counts();$('#summaryBox').hidden=!scans.length;$('#summary').innerHTML=Object.entries(c).sort((a,b)=>(a[0]==='unknown')-(b[0]==='unknown')).map(([id,n])=>`<span class="chip ${id==='unknown'?'unk':''}">${esc(nameOf(id))} × ${n}</span>`).join('')||'<span class="muted">Nothing detected</span>'}
-$('#addAll').onclick=()=>{const c=counts();for(const [id,n] of Object.entries(c))if(id!=='unknown')addToBill(id,n);scans=[];renderScans()};
-$('#clearScans').onclick=()=>{scans=[];renderScans()};$('#closer').checked=localStorage.getItem('vb_closer')!=='0';$('#closer').onchange=()=>localStorage.setItem('vb_closer',$('#closer').checked?1:0);$('#showUnknown').onchange=()=>{localStorage.setItem('vb_showU',$('#showUnknown').checked?1:0);renderScans()};
+function counts(){const c={};scans.forEach(s=>s.dets.forEach(d=>{if(d.manual)c[d.id]=(c[d.id]||0)+(d.qty||1)}));return c}
+const unconfirmed=()=>scans.flatMap(s=>s.dets.filter(d=>!d.manual));
+function renderSummary(){const c=counts();$('#summaryBox').hidden=!scans.length;const uc=unconfirmed();$('#confirmAll').hidden=!uc.some(d=>(d.id!=='unknown'?d.id:d.guess));$('#confirmAll').textContent=`✔ Confirm all ${uc.length} suggestion(s)`;$('#summary').innerHTML=(uc.length?`<p class="muted">${uc.length} item(s) still waiting for your confirmation – they are not counted yet.</p>`:'')+Object.entries(c).sort((a,b)=>(a[0]==='unknown')-(b[0]==='unknown')).map(([id,n])=>`<span class="chip ${id==='unknown'?'unk':''}">${esc(nameOf(id))} × ${n}</span>`).join('')||'<span class="muted">Nothing detected</span>'}
+$('#confirmAll').onclick=()=>{for(const d of unconfirmed()){const g=d.id!=='unknown'?d.id:d.guess;if(g)setLabel(d,g,false)}renderScans()};
+$('#addAll').onclick=()=>{const uc=unconfirmed();if(uc.length&&!confirm(`${uc.length} item(s) are not confirmed yet and will be left out. Continue?`))return;const c=counts();for(const [id,n] of Object.entries(c))if(id!=='unknown')addToBill(id,n);scans=[];renderScans()};
+$('#clearScans').onclick=()=>{scans=[];renderScans()};$('#ocr').checked=localStorage.getItem('vb_ocr')==='1';$('#ocr').onchange=()=>localStorage.setItem('vb_ocr',$('#ocr').checked?1:0);$('#closer').checked=localStorage.getItem('vb_closer')!=='0';$('#closer').onchange=()=>localStorage.setItem('vb_closer',$('#closer').checked?1:0);$('#showUnknown').onchange=()=>{localStorage.setItem('vb_showU',$('#showUnknown').checked?1:0);renderScans()};
 $('#thr').oninput=()=>{$('#thrVal').textContent=(+$('#thr').value).toFixed(2);localStorage.setItem('vb_thr2',$('#thr').value);reclassifyScans()};
 $('#hiAcc').onchange=()=>{localStorage.setItem('vb_hi',$('#hiAcc').checked?1:0);if(confirm('Reload now to switch detector?'))location.reload()};
 const needModels=()=>{if(!det){alert('Models are still loading…');return true}};

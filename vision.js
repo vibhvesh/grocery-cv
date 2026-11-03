@@ -77,3 +77,25 @@ export function decide({ranked,bg},thr=0.55,minMargin=0.02){if(!ranked.length)re
  const ok=a.s>=thr&&margin>=minMargin&&a.s>bg+0.02;return{id:ok?a.id:'unknown',conf:a.s,guess:a.id,margin,top3:ranked.slice(0,3)}}
 // batched embeddings: one model call for many crops
 export async function embedBatch(fe,imgs,bs=8){const out=[];for(let i=0;i<imgs.length;i+=bs){const o=await fe(imgs.slice(i,i+bs));const [n,t,D]=o.dims;for(let k=0;k<n;k++){const d=Array.from(o.data.slice(k*t*D,k*t*D+D));const m=Math.hypot(...d)||1;out.push(d.map(v=>v/m))}}return out}
+// ---------- v10: multi-cue fusion (DINOv2 shape/texture + colour histogram + optional OCR text) ----------
+// grey-world normalised hue/sat histogram (12x3) + 4 achromatic brightness bins, over the inner region
+export function colourHist(data,W,H,ch,inner=[0,0,W,H]){const HB=12,SB=3,VB=4,h=new Float32Array(HB*SB+VB);let n=0;const [x0,y0,w,hh]=inner.map(Math.round);
+ let mr=0,mg=0,mb=0,m=0;for(let y=y0;y<y0+hh;y+=2)for(let x=x0;x<x0+w;x+=2){const i=(y*W+x)*ch;mr+=data[i];mg+=data[i+1];mb+=data[i+2];m++}const g=(mr+mg+mb)/3/m,kr=g/(mr/m||1),kg=g/(mg/m||1),kb=g/(mb/m||1);
+ for(let y=y0;y<y0+hh;y+=2)for(let x=x0;x<x0+w;x+=2){const i=(y*W+x)*ch;const r=Math.min(255,data[i]*kr)/255,gg=Math.min(255,data[i+1]*kg)/255,b=Math.min(255,data[i+2]*kb)/255;
+  const mx=Math.max(r,gg,b),mn=Math.min(r,gg,b),d=mx-mn,s=mx?d/mx:0;let bin;
+  if(s<0.25||mx<0.15)bin=HB*SB+Math.min(VB-1,Math.floor(mx*VB));else{let hue=mx===r?((gg-b)/d+6)%6:mx===gg?(b-r)/d+2:(r-gg)/d+4;bin=Math.min(HB-1,Math.floor(hue/6*HB))*SB+Math.min(SB-1,Math.floor((s-0.25)/0.75*SB))}h[bin]++;n++}
+ for(let i=0;i<h.length;i++)h[i]/=n;return Array.from(h,v=>Math.round(v*1e4)/1e4)}
+export const histSim=(a,b)=>{let s=0;for(let i=0;i<a.length;i++)s+=Math.min(a[i],b[i]);return s};
+export const INNER224=[224*0.15,224*0.15,224*0.7,224*0.7];
+const ed=(a,b)=>{const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]!==b[j-1]));return d[a.length][b.length]};
+// vocab: {productId:[WORDS]} ; returns {id:1} only when the read text points to exactly one product
+export function ocrHits(text,vocab){const ws=(String(text).toUpperCase().match(/[A-Z]{4,}/g)||[]);const hit={};for(const [id,v] of Object.entries(vocab))for(const w of ws)for(const t of v)if(w===t||(t.length>=5&&ed(w,t)<=1))hit[id]=1;return Object.keys(hit).length===1?hit:{}}
+// score-level fusion: rank by embedding + wc*(colour-0.5) + wo*ocr; accept only if the embedding itself is confident
+export const WC=0.1,WO=0.05;
+export function decideFused({ranked,bg},cols,col,ocr={},thr=0.5,minMargin=0.02){if(!ranked.length)return{id:'unknown',conf:0,guess:null,margin:0,top3:[]};
+ const rk=ranked.map(({id,s})=>{const hs=col&&cols[id]&&cols[id].length?Math.max(...cols[id].map(h=>histSim(h,col))):0.5;return{id,s,c:hs,f:s+WC*(hs-0.5)+WO*(ocr[id]||0)}}).sort((a,b)=>b.f-a.f);
+ const [a,b]=rk,margin=a.f-(b?b.f:0),ok=a.s>=thr&&margin>=minMargin&&a.s>bg+0.02;return{id:ok?a.id:'unknown',conf:a.s,guess:a.id,margin,top3:rk.slice(0,3).map(t=>({id:t.id,s:t.f}))}}
+// merge two boxes with the same label that overlap >=25% (a tilted pack split in two), unless the union swallows another item
+export function mergeSame(r){const A=b=>b[2]*b[3];let ch=true;while(ch){ch=false;for(let i=0;i<r.length&&!ch;i++)for(let j=i+1;j<r.length;j++){const a=r[i],b=r[j];if(a.id==='unknown'||a.id!==b.id)continue;if(iou(a.box,b.box).cont<0.25)continue;
+ const x=Math.min(a.box[0],b.box[0]),y=Math.min(a.box[1],b.box[1]),u=[x,y,Math.max(a.box[0]+a.box[2],b.box[0]+b.box[2])-x,Math.max(a.box[1]+a.box[3],b.box[1]+b.box[3])-y];
+ if(A(u)>2.3*Math.max(A(a.box),A(b.box))||r.some(k=>k!==a&&k!==b&&iou(u,k.box).inA>0.5))continue;a.box=u;a.conf=Math.max(a.conf,b.conf);r.splice(j,1);ch=true;break}}return r}
