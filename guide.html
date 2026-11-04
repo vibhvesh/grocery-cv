@@ -1,0 +1,116 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VisionBill v11 – User Guide</title>
+<style>body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:820px;margin:0 auto;padding:20px;line-height:1.55;color:#1f2937}h1{color:#14532d}h2{color:#166534;border-bottom:2px solid #dcfce7;padding-bottom:4px;margin-top:28px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d1d5db;padding:6px 8px;vertical-align:top}th{background:#f0fdf4}code{background:#f3f4f6;padding:1px 4px;border-radius:4px}a.back{display:inline-block;margin-bottom:10px}@media print{a.back{display:none}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body><a class="back" href="./">← Back to VisionBill</a><h1>VisionBill v11 – User Guide (for store staff)</h1>
+<p>VisionBill looks at products through the camera, <strong>suggests</strong> what each one is, and <strong>you confirm</strong> it. Confirmed items go on the bill. Every answer you give teaches the app, so it gets better the more you use it.</p>
+<p>Open it at <strong>https://vibhvesh.github.io/grocery-cv/</strong> in Chrome (phone or laptop). The version number (v11) is shown next to the title.</p>
+<hr />
+<h2>1. First visit / setup</h2>
+<ol>
+<li>Open the link in <strong>Chrome</strong> (Edge also works). On a phone, allow the camera when asked.</li>
+<li>Wait for the status pill (top right) to say <strong>Ready ✔</strong>. The first time, the app downloads its AI models (about 150 MB). After that they are stored in the browser and it starts much faster.</li>
+<li>Go to <strong>Products</strong> and tap <strong>📦 Load sample products</strong> if you want the 8 demo products (Bansal, Dukes, Black Salt Pouch, Shankar, Tata, Ching's, Tang, Kismi). They come already trained.</li>
+<li><em>(Recommended)</em> Tap <strong>📂 Connect folder</strong> and choose a folder on this computer. The whole product database is then saved there automatically (Chrome/Edge on a computer only).</li>
+</ol>
+<h2>2. Adding products and training</h2>
+<ol>
+<li>On <strong>Products</strong>, fill in <strong>Name</strong>, <strong>Price (₹)</strong>, and optionally category/unit/notes.</li>
+<li>Add <strong>training photos</strong>: 3–6 photos of the product from different sides/angles, each on a plain table. The app crops the product automatically.</li>
+<li>Tap <strong>Save product</strong>. Training happens on its own in a few seconds – there is no separate "train" step.</li>
+<li>You can also teach from the Billing screen: when a suggestion is wrong, pick the right product, or choose <strong>➕ New product</strong> – that photo is saved as training too.</li>
+</ol>
+<p>Tip: a product that keeps being confused with another needs more photos – just keep correcting it during billing; each correction is a new training photo.</p>
+<h2>3. One-at-a-time mode (recommended – most accurate)</h2>
+<p>Go to <strong>Billing</strong> and choose <strong>One at a time</strong>.</p>
+<ol>
+<li>Tap <strong>🎥 Start camera</strong>. On phones the back camera is used. Point it straight down at a <strong>plain, empty table</strong>. The app remembers what the empty table looks like (you can redo this with <strong>Learn empty table</strong>).</li>
+<li>Put <strong>one product</strong> on the table and tap the big <strong>📸 CAPTURE</strong> button.</li>
+<li>Take the product away, put the next one down, tap again. You don't have to wait – each photo is processed in the background (status <em>🕒 queued → ⏳ recognising → suggestion</em>).</li>
+<li>Repeat for all products (e.g. 10 products = 10 captures). Two packs of the same product = capture it twice.</li>
+</ol>
+<h3>Auto-capture (hands-free)</h3>
+<ul>
+<li>In the same screen tick <strong>Auto-capture</strong> and set <strong>when still for N s</strong> (default <strong>2 seconds</strong>).</li>
+<li>Now just place a product and take your hand away. When the picture has been still for 2 s, it is captured automatically (the badge on the video shows <em>Hold still… 1.2 s → 📸 Captured</em>).</li>
+<li>It will <strong>not</strong> capture the empty table, and it will <strong>not</strong> capture the same product twice in a row. To bill a second pack of the same product, take the first one away (so the table is empty for a moment), then put the second one down.</li>
+<li>If the table/lighting changes, tap <strong>Learn empty table</strong> with nothing on the table.</li>
+</ul>
+<h3>Create bill</h3>
+<ul>
+<li>Confirm each item (see section 5), or tap <strong>✔ Confirm all suggestions</strong> if they are all right.</li>
+<li>Tap <strong>🧾 Create bill</strong>. If some photos are still processing it waits for them. If some items are not confirmed, it warns you – those are left out.</li>
+<li>The bill appears below with subtotal, GST and grand total. Use <strong>🖨️ Print</strong> or <strong>⬇️ PDF</strong>.</li>
+</ul>
+<p>You can also add photos you already have with <strong>🖼️ Photo(s)</strong> – each photo is treated as one product.</p>
+<h2>4. Multi-item mode (several products in one photo)</h2>
+<p>Choose <strong>Many items in one photo</strong>. Take or upload a photo with several products (<strong>📷 Photo(s)</strong> or <strong>🎥 Webcam</strong>). Each product gets a numbered box and its own suggestion. If a product was missed, <strong>drag a box</strong> around it on the photo. Then confirm, and tap <strong>➕ Add all to bill</strong>.</p>
+<p>This mode is faster for many items but less accurate when products touch or overlap – leave gaps between them.</p>
+<h2>5. Confirming suggestions</h2>
+<p>For every item the app says <strong>"I think this is X?"</strong> with a confidence % and the <strong>top 3 guesses</strong>.
+- Right? Tap <strong>✔ Yes, X</strong>.
+- One of the other guesses is right? Tap that guess.
+- None are right? Use <strong>✏️ Something else</strong> and pick the product, <strong>➕ New product</strong> (type name and price), or <strong>Not in database</strong>.
+- "<strong>not sure – maybe X</strong>" means low confidence – check it carefully.</p>
+<p>Nothing goes on the bill until it is confirmed. Every confirmation/correction is saved as a training photo, so the same mistake becomes less likely.</p>
+<h2>6. Saving your data: folder, export, import, reset</h2>
+<p>All data lives <strong>in this browser</strong> on this device.
+- <strong>📂 Connect folder</strong> – autosaves everything (products, photos, training) into a folder on your computer. Next visit, reconnect it with one click.
+- <strong>⬇️ Export database</strong> – downloads one backup file (<code>visionbill-db-DATE.json</code>). Do this regularly, and use it to move the database to another device.
+- <strong>⬆️ Import database</strong> – loads a backup file (replaces the products in this browser).
+- <strong>🗑️ Reset database</strong> – deletes all products, training, settings and the current bill from this browser (asks twice; optionally clears the connected folder too). Export first if you might need the data.</p>
+<p>Clearing browser data / using incognito also deletes the database – keep an export.</p>
+<h2>7. Tips for best results</h2>
+<ul>
+<li><strong>One product at a time on a plain table</strong> gives the best accuracy.</li>
+<li>Use a <strong>plain, single-colour surface</strong> (a sheet or tray), not a patterned cloth.</li>
+<li><strong>Even light</strong>: avoid strong sunlight patches, glare on shiny packets and your own shadow.</li>
+<li>Hold the camera <strong>straight above</strong>, so the product fills a good part of the picture.</li>
+<li>Show the <strong>front of the packet</strong> (the side with the brand name).</li>
+<li>Keep hands out of the picture when auto-capture is on.</li>
+<li>Train each product with photos taken in the <strong>same place and light</strong> where you bill.</li>
+</ul>
+<h2>8. Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stuck on "Loading AI models…"</td>
+<td>Needs internet the first time (≈150 MB). Wait, or reload. Use Chrome or Edge.</td>
+</tr>
+<tr>
+<td>"Camera unavailable"</td>
+<td>Allow camera permission (lock icon in the address bar), close other apps using the camera. The page must be opened via the https link.</td>
+</tr>
+<tr>
+<td>Auto-capture never fires</td>
+<td>Hold still longer; increase lighting; make sure <strong>Auto-capture</strong> is ticked; tap <strong>Learn empty table</strong> with an empty table.</td>
+</tr>
+<tr>
+<td>Auto-capture fires on the empty table / shadows</td>
+<td>Tap <strong>Learn empty table</strong> again; avoid moving shadows; increase the delay.</td>
+</tr>
+<tr>
+<td>Same product is not captured twice</td>
+<td>Remove it so the table is empty for a moment, then place the second pack – or press the big button.</td>
+</tr>
+<tr>
+<td>Wrong product suggested</td>
+<td>Pick the right one – it is learned. Add more training photos of both products.</td>
+</tr>
+<tr>
+<td>"Not in database" for a known product</td>
+<td>Better light, front of packet up, closer camera; or correct it to teach the app.</td>
+</tr>
+<tr>
+<td>Slow</td>
+<td>First scan after loading is slower. Close other tabs. Turn off <em>Read printed text (OCR)</em> in Settings.</td>
+</tr>
+<tr>
+<td>Lost products</td>
+<td>Reconnect the folder or <strong>Import</strong> your last export.</td>
+</tr>
+</tbody>
+</table></body></html>

@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=10';
-const APP_VERSION='10',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=11';
+const APP_VERSION='11',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -8,8 +8,8 @@ const getItems=()=>req(tx('items').getAll()),putItem0=i=>req(tx('items','readwri
 const kvGet=k=>req(tx('kv').get(k)),kvSet0=(k,v)=>req(tx('kv','readwrite').put(v,k));
 const putItem=async i=>{await putItem0(i);scheduleSave()},delItem=async id=>{await delItem0(id);scheduleSave()},kvSet=async(k,v)=>{await kvSet0(k,v);if(k==='negs')scheduleSave()};
 // ---------- state / utils ----------
-const $=s=>document.querySelector(s);let T,det,fe,items=[],negs=[],bank=[],pendingPhotos=[],bill=[],scans=[],busy=Promise.resolve();
-window.VB={get items(){return items},get scans(){return scans},get ready(){return !!(det&&fe)}};
+const $=s=>document.querySelector(s);let singles=[];let T,det,fe,items=[],negs=[],bank=[],pendingPhotos=[],bill=[],scans=[],busy=Promise.resolve();
+window.VB={get items(){return items},get scans(){return scans},get singles(){return singles},get bill(){return bill},get ready(){return !!(det&&fe)}};
 const EMB_DIM=384,inr=n=>'₹'+(+n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const status=t=>$('#status').textContent=t,esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MARGIN=0.02,thr=()=>+$('#thr').value,NIDB='Not in database',nameOf=id=>id==='unknown'?NIDB:(items.find(i=>i.id==id)||{}).name||'?';
@@ -21,7 +21,8 @@ function cropURL(cv,[x,y,w,h],pad=0.1,size=224){const s=Math.max(w,h)*(1+2*pad),
 const raw=cv=>T.RawImage.fromCanvas(cv);
 // ---------- models ----------
 async function loadModels(){const hi=localStorage.getItem('vb_hi')==='1';$('#hiAcc').checked=hi;
- T=await import(TJS);T.env.allowLocalModels=false;
+ T=await import(TJS);T.env.allowLocalModels=false;try{if(localStorage.getItem('vb_proxy')!=='0')T.env.backends.onnx.wasm.proxy=true}catch{}// run WASM inference in a worker so the camera/capture UI never freezes
+
  const files={},progress=p=>{if(p.status==='progress'&&p.total){files[p.file]=[p.loaded,p.total];const L=Object.values(files).reduce((a,b)=>a+b[0],0),Tt=Object.values(files).reduce((a,b)=>a+b[1],0);status(`Downloading models ${(L/1e6).toFixed(0)}/${(Tt/1e6).toFixed(0)} MB`)}};
  const detId=hi?'Xenova/owlv2-base-patch16-ensemble':'Xenova/owlvit-base-patch32';
  const tryLoad=async device=>{const gpu=device==='webgpu';
@@ -228,3 +229,64 @@ $('#importFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';
  $('#thr').value=localStorage.getItem('vb_thr2')||0.5;$('#thrVal').textContent=(+$('#thr').value).toFixed(2);$('#showUnknown').checked=localStorage.getItem('vb_showU')!=='0';
  negs=(await kvGet('negs'))||[];if(negs[0]&&negs[0].length!==EMB_DIM)negs=[];await refresh();await initFolder().catch(e=>console.warn('folder',e));
  try{status('Loading AI models…');await loadModels();status('Ready ✔');queue(()=>trainAll())}catch(e){console.error(e);status('Model load failed: '+e.message)}})();
+
+// ---------- v11: One-at-a-time mode ----------
+const setMode=m=>{localStorage.setItem('vb_mode',m);$('#singleMode').hidden=m!=='single';$('#multiMode').hidden=m==='single';$('#modeSingle').checked=m==='single';$('#modeMulti').checked=m!=='single'};
+document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>setMode(r.value));setMode(localStorage.getItem('vb_mode')||'single');
+let sstream=null,sN=0;const sv=$('#scam');
+async function startSingleCam(){if(sstream){sstream.getTracks().forEach(t=>t.stop());sstream=null;sv.srcObject=null;$('#bigSnap').disabled=true;$('#camOff').hidden=false;$('#scamBtn').textContent='🎥 Start camera';return}
+ try{sstream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});sv.srcObject=sstream;await sv.play();$('#bigSnap').disabled=false;$('#camOff').hidden=true;$('#scamBtn').textContent='⏹ Stop camera';
+  setTimeout(()=>{if(!emptyRef)learnEmpty(true)},1200)}catch(err){alert('Camera unavailable: '+err.message+'\nYou can still use “Photo(s)”.')}}
+$('#scamBtn').onclick=startSingleCam;window.VB.startSingleCam=startSingleCam;
+function addSingle(cv,full){const s={n:++sN,thumb:toCanvas(cv,240).toDataURL('image/jpeg',.8),status:'queued',det:null};singles.push(s);renderSingles();queue(()=>processSingle(s,cv,full));return s}
+function captureSingle(how='button'){if(!sv.videoWidth)return;if(needModels())return;if(how==='button'&&emptyRef&&sdiff(frameSig(),emptyRef)<SAME){status('Table looks empty – place a product first');badge('Table looks empty');return}const full=toCanvas(sv,2048),cv=toCanvas(sv,1280);const s=addSingle(cv,full);s.how=how;
+ const b=$('#bigSnap');b.classList.add('flash');setTimeout(()=>b.classList.remove('flash'),250);lastSig=frameSig();}
+$('#bigSnap').onclick=()=>captureSingle('button');
+$('#singlePhotos').onchange=async e=>{if(needModels())return;const fs=[...e.target.files];e.target.value='';for(const f of fs){const {cv,full}=await decodePhoto(f);addSingle(cv,full)}};
+// only one product per photo: take the biggest, most central detection; fall back to a centre crop
+async function processSingle(s,cv,full){s.status='processing';renderSingles();const t=performance.now();
+ let boxes=[];try{boxes=await V.segment(det,raw(cv),{extra:items.map(i=>i.name)})}catch(e){console.warn(e)}
+ const W=cv.width,H=cv.height,A=W*H;const cand=boxes.filter(b=>!b.big&&b.box[2]*b.box[3]>A*0.01);
+ const rank=b=>{const [x,y,w,h]=b.box,dx=(x+w/2)/W-0.5,dy=(y+h/2)/H-0.5;return Math.sqrt(w*h/A)*(1-Math.min(0.9,Math.hypot(dx,dy)*1.4))};
+ let box;if(cand.length){box=cand.sort((a,b)=>rank(b)-rank(a))[0].box;s.fallback=false}else{box=[W*0.2,H*0.2,W*0.6,H*0.6];s.fallback=true}
+ const sc0=full.width/cv.width;let vs=viewCanvases(full,box,sc0,'fast');let es=await V.embedBatch(fe,vs.map(raw));const col=colOfCanvas(vs[0]);let r=V.decideFused(V.scoreViews(bank,es),cols,col,{},thr(),MARGIN);
+ if(r.conf<0.7||r.margin<0.05){const ex=viewCanvases(full,box,sc0,'extra');es=[...es,...await V.embedBatch(fe,ex.map(raw))];r=V.decideFused(V.scoreViews(bank,es),cols,col,{},thr(),MARGIN);s.closer=true}
+ const d={box,es,col,crop:cropURL(full,box.map(v=>v*sc0)),...r};d.manual=false;s.det=d;s.status='done';s.ms=Math.round(performance.now()-t);renderSingles()}
+function renderSingles(){const root=$('#singleList');root.innerHTML='';const pct=v=>Math.round(v*100)+'%';
+ singles.forEach((s,i)=>{const d=s.det,row=document.createElement('div');row.className='det srow'+(d&&d.manual?' ok':'');
+  if(!d){row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${s.thumb}" class="dthumb"><div class="dmain"><b>Item ${s.n}</b> <span class="tag">${s.status==='processing'?'⏳ recognising…':'🕒 queued'}</span></div><button data-a="del">🗑</button></div>`}
+  else{const sugg=d.manual?d.id:(d.id!=='unknown'?d.id:d.guess),sname=sugg&&sugg!=='unknown'?esc(nameOf(sugg)):NIDB,unk=d.id==='unknown';
+   const chips=(d.top3||[]).map(t=>`<button class="chip pick ${t.id===d.id&&d.manual?'on':''}" data-id="${t.id}">${esc(nameOf(t.id))} ${pct(t.s)}</button>`).join('');
+   row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${d.crop}" class="dthumb"><div class="dmain">${d.manual?`<b>Item ${s.n}: ${d.id==='unknown'?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="tag okt">✔ confirmed</span>`:`<b>Item ${s.n}: ${unk?'not sure – maybe':'I think this is'} ${sname}?</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span> <span class="tag ask">needs your OK</span>`}${s.fallback?' <span class="muted small">(no clear item found – used centre of photo)</span>':''}
+    <div class="muted small">Top guesses: ${chips||'—'}</div></div></div>
+    <div class="acts">${!d.manual&&sugg&&sugg!=='unknown'?`<button data-a="yes" class="primary">✔ Yes, ${sname}</button>`:''}<select class="spick"><option value="">✏️ ${d.manual?'Change':'Something else'}…</option>${items.map(it=>`<option value="${it.id}">${esc(it.name)} · ${inr(it.price)}</option>`).join('')}<option value="__new">➕ New product…</option><option value="unknown">Not in database</option></select><button data-a="del">🗑</button></div>`;
+   row.querySelectorAll('.pick').forEach(b=>b.onclick=()=>{setLabel(d,b.dataset.id,false);renderSingles()});
+   const yb=row.querySelector('[data-a=yes]');if(yb)yb.onclick=()=>{setLabel(d,sugg,false);renderSingles()};
+   row.querySelector('.spick').onchange=async e=>{const v=e.target.value;if(!v)return;if(v==='__new'){await newProductFromCrop(d);renderSingles();return}if(v==='unknown'){d.id='unknown';d.manual=true;renderSingles();return}setLabel(d,v,false);renderSingles()}}
+  row.querySelector('[data-a=del]').onclick=()=>{singles.splice(i,1);renderSingles()};root.append(row)});
+ const pend=singles.filter(s=>!s.det).length,unc=singles.filter(s=>s.det&&!s.det.manual).length,ok=singles.filter(s=>s.det&&s.det.manual&&s.det.id!=='unknown').length;
+ $('#singleInfo').textContent=singles.length?`${singles.length} captured · ${pend} processing · ${unc} waiting for your OK · ${ok} confirmed`:'Nothing captured yet.'}
+$('#sConfirmAll').onclick=()=>{for(const s of singles){const d=s.det;if(!d||d.manual)continue;const g=d.id!=='unknown'?d.id:d.guess;if(g)setLabel(d,g,false)}renderSingles()};
+$('#sClear').onclick=()=>{if(singles.length&&!confirm('Clear the captured list?'))return;singles=[];sN=0;renderSingles()};
+$('#createBill').onclick=async()=>{const b=$('#createBill');if(singles.some(s=>!s.det)){b.disabled=true;b.textContent='⏳ Waiting for processing…';await busy;b.disabled=false;b.textContent='🧾 Create bill'}
+ const unc=singles.filter(s=>s.det&&!s.det.manual);if(unc.length&&!confirm(`${unc.length} item(s) are not confirmed yet and will be LEFT OUT of the bill.\nOK = create bill without them · Cancel = go back and confirm`))return;
+ const ok=singles.filter(s=>s.det&&s.det.manual&&s.det.id!=='unknown');if(!ok.length){alert('No confirmed items yet.');return}
+ for(const s of ok)addToBill(s.det.id,1);singles=singles.filter(s=>!ok.includes(s));renderSingles();$('#billTable').scrollIntoView({behavior:'smooth'});status(`Bill created: ${ok.length} item(s) added`)};
+// auto-capture: frame differencing on a tiny grey thumbnail. motion -> still for N s -> not the empty table -> not the same as last capture
+const sigC=document.createElement('canvas');sigC.width=32;sigC.height=24;let prevSig=null,lastSig=null,emptyRef=null,stillSince=0,armed=true;
+function frameSig(){if(!sv.videoWidth)return null;const g=sigC.getContext('2d',{willReadFrequently:true});g.drawImage(sv,0,0,32,24);const d=g.getImageData(0,0,32,24).data,o=new Float32Array(768);let m=0;for(let i=0;i<768;i++){o[i]=(d[i*4]*0.3+d[i*4+1]*0.59+d[i*4+2]*0.11);m+=o[i]}m/=768;for(let i=0;i<768;i++)o[i]-=m;return o}// brightness-normalised
+const sdiff=(a,b)=>{if(!a||!b)return 999;let s=0;for(let i=0;i<a.length;i++)s+=Math.abs(a[i]-b[i]);return s/a.length};
+function learnEmpty(silent){emptyRef=frameSig();lastSig=null;if(!silent)status('Empty table learned ✔')}
+$('#emptyBtn').onclick=()=>learnEmpty(false);
+const badge=t=>{const b=$('#autoBadge');b.hidden=!t;b.textContent=t||''};
+$('#autoCap').checked=localStorage.getItem('vb_auto')==='1';$('#autoDelay').value=localStorage.getItem('vb_autoDelay')||2;
+$('#autoCap').onchange=()=>{localStorage.setItem('vb_auto',$('#autoCap').checked?1:0);armed=true;stillSince=0;if(!$('#autoCap').checked)badge('')};$('#autoDelay').onchange=()=>localStorage.setItem('vb_autoDelay',$('#autoDelay').value);
+const MOVE=6,SAME=9;window.VB.auto={get emptyRef(){return emptyRef},MOVE,SAME};
+setInterval(()=>{if(!sstream||!$('#autoCap').checked||$('#singleMode').hidden||!det)return;const f=frameSig();if(!f)return;const mv=sdiff(f,prevSig);prevSig=f;const now=performance.now(),need=(+$('#autoDelay').value||2)*1000;
+ const isEmpty=emptyRef&&sdiff(f,emptyRef)<SAME;if(isEmpty)lastSig=null;// table cleared: the same product may be placed again (2nd pack)
+ if(mv>MOVE){stillSince=0;armed=true;badge('👋 Movement…');return}
+ if(!stillSince)stillSince=now;if(isEmpty){badge('Empty table – place a product');return}
+ if(lastSig&&sdiff(f,lastSig)<SAME){badge('✔ Already captured – place the next product');return}
+ if(!armed){badge('Waiting for a change…');return}
+ const left=need-(now-stillSince);if(left>0){badge(`Hold still… ${(left/1000).toFixed(1)} s`);return}
+ captureSingle('auto');armed=false;stillSince=0;badge(`📸 Captured item ${sN}`)},200);

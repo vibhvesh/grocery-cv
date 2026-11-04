@@ -1,10 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=10">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=11">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v10</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v11</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><a class="guide" href="guide.html" target="_blank">📖 Guide</a><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
  <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div>
@@ -23,6 +23,17 @@
 </section>
 <section id="bill" class="tab">
  <div class="card"><h2>Scan items</h2>
+  <div class="row modes"><label class="chk"><input type="radio" name="mode" value="single" id="modeSingle"> <b>One at a time</b> (best accuracy)</label><label class="chk"><input type="radio" name="mode" value="multi" id="modeMulti"> Many items in one photo</label></div>
+  <div id="singleMode" hidden>
+   <p class="tip">Put <b>one product</b> on a plain table, tap the big button (or turn on Auto-capture), then swap in the next product. Processing runs in the background.</p>
+   <div class="camwrap"><video id="scam" playsinline muted autoplay></video><div id="autoBadge" class="badge" hidden></div><div id="camOff" class="camoff">Camera is off – tap “Start camera”</div></div>
+   <button id="bigSnap" class="bigsnap" disabled>📸 CAPTURE</button>
+   <div class="row"><button id="scamBtn" class="primary">🎥 Start camera</button><label class="chk"><input type="checkbox" id="autoCap"> Auto-capture</label><label>when still for <input id="autoDelay" type="number" min="0.5" max="10" step="0.5" value="2" style="width:64px"> s</label><button id="emptyBtn" title="Point the camera at the empty table and tap">Learn empty table</button><label class="btn">🖼️ Photo(s)<input id="singlePhotos" type="file" accept="image/*" multiple hidden></label></div>
+   <div id="singleList"></div>
+   <div class="row"><button id="sConfirmAll">✔ Confirm all suggestions</button><button id="createBill" class="primary big">🧾 Create bill</button><button id="sClear">Clear list</button></div>
+   <p class="muted" id="singleInfo"></p>
+  </div>
+  <div id="multiMode">
   <div class="row"><label class="btn primary">📷 Photo(s)<input id="billPhotos" type="file" accept="image/*" multiple hidden></label>
   <button id="camBtn">🎥 Webcam</button><button id="snapBtn" hidden class="primary">Capture</button></div>
   <details><summary class="muted">Settings</summary>
@@ -36,7 +47,7 @@
   <p class="tip">📸 Best results: put items on a <b>plain light tray or sheet</b>, shoot <b>straight from above</b> in even light, and leave a small gap between items.</p>
   <p class="muted">Step 1 finds &amp; crops every item, Step 2 suggests what each one is (shape, texture and colour; optionally printed text). Nothing is billed until you confirm: tap ✔ Yes, pick another guess, or ✏️ Something else – every answer is saved as training. Teach unknown crops with <b>➕ New product</b>, or pick the right product in the dropdown (saved as training automatically). Drag on a photo to draw a missed item.</p>
   <div id="scanResults"></div>
-  <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="confirmAll" class="primary" hidden>✔ Confirm all</button><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div>
+  <div id="summaryBox" class="card inner" hidden><h2>Detected count</h2><div id="summary"></div><div class="row"><button id="confirmAll" class="primary" hidden>✔ Confirm all</button><button id="addAll" class="primary">➕ Add all to bill</button><button id="clearScans">Clear scans</button></div></div></div></div>
  <div class="card printable"><div class="row between"><h2>Bill</h2><span class="muted" id="billDate"></span></div>
   <div class="tablewrap"><table id="billTable"><thead><tr><th>Item</th><th>Qty</th><th>Unit ₹</th><th>Total ₹</th><th class="np"></th></tr></thead><tbody></tbody></table></div>
   <div class="row np"><select id="manualItem"></select><button id="addManual">+ Add manually</button></div>
@@ -46,4 +57,4 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js?v=10"></script></body></html>
+<script type="module" src="app.js?v=11"></script></body></html>
