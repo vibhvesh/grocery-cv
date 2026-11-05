@@ -1,5 +1,5 @@
-import * as V from './vision.js?v=11';
-const APP_VERSION='11',MODEL_TAG='dinov2-small-q8';
+import * as V from './vision.js?v=12';import * as TR from './tray.js?v=12';
+const APP_VERSION='12',MODEL_TAG='dinov2-small-q8';
 const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
 // ---------- IndexedDB ----------
 let db;function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('visionbill',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('items',{keyPath:'id'});d.createObjectStore('kv')};r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)})}
@@ -231,14 +231,14 @@ $('#importFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';
  try{status('Loading AI models…');await loadModels();status('Ready ✔');queue(()=>trainAll())}catch(e){console.error(e);status('Model load failed: '+e.message)}})();
 
 // ---------- v11: One-at-a-time mode ----------
-const setMode=m=>{localStorage.setItem('vb_mode',m);$('#singleMode').hidden=m!=='single';$('#multiMode').hidden=m==='single';$('#modeSingle').checked=m==='single';$('#modeMulti').checked=m!=='single'};
+let MODE='single';const setMode=m=>{MODE=m;localStorage.setItem('vb_mode',m);$('#singleMode').hidden=m==='multi';$('#multiMode').hidden=m!=='multi';$('#trayOpts').hidden=m!=='tray';$('#modeSingle').checked=m==='single';$('#modeTray').checked=m==='tray';$('#modeMulti').checked=m==='multi';if(m==='tray')updCalInfo();$('#singleTip').innerHTML=m==='tray'?'Put <b>one product in each slot</b> of the tray, keep all 4 black corner squares in view, then tap the big button (or use Auto-capture). Empty slots are skipped; only changed slots are added again.':'Put <b>one product</b> on a plain table, tap the big button (or turn on Auto-capture), then swap in the next product. Processing runs in the background.'};
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>setMode(r.value));setMode(localStorage.getItem('vb_mode')||'single');
 let sstream=null,sN=0;const sv=$('#scam');
 async function startSingleCam(){if(sstream){sstream.getTracks().forEach(t=>t.stop());sstream=null;sv.srcObject=null;$('#bigSnap').disabled=true;$('#camOff').hidden=false;$('#scamBtn').textContent='🎥 Start camera';return}
  try{sstream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});sv.srcObject=sstream;await sv.play();$('#bigSnap').disabled=false;$('#camOff').hidden=true;$('#scamBtn').textContent='⏹ Stop camera';
   setTimeout(()=>{if(!emptyRef)learnEmpty(true)},1200)}catch(err){alert('Camera unavailable: '+err.message+'\nYou can still use “Photo(s)”.')}}
 $('#scamBtn').onclick=startSingleCam;window.VB.startSingleCam=startSingleCam;
-function addSingle(cv,full){const s={n:++sN,thumb:toCanvas(cv,240).toDataURL('image/jpeg',.8),status:'queued',det:null};singles.push(s);renderSingles();queue(()=>processSingle(s,cv,full));return s}
+function addSingle(cv,full){if(MODE==='tray')return addTray(cv,full);const s={n:++sN,thumb:toCanvas(cv,240).toDataURL('image/jpeg',.8),status:'queued',det:null};singles.push(s);renderSingles();queue(()=>processSingle(s,cv,full));return s}
 function captureSingle(how='button'){if(!sv.videoWidth)return;if(needModels())return;if(how==='button'&&emptyRef&&sdiff(frameSig(),emptyRef)<SAME){status('Table looks empty – place a product first');badge('Table looks empty');return}const full=toCanvas(sv,2048),cv=toCanvas(sv,1280);const s=addSingle(cv,full);s.how=how;
  const b=$('#bigSnap');b.classList.add('flash');setTimeout(()=>b.classList.remove('flash'),250);lastSig=frameSig();}
 $('#bigSnap').onclick=()=>captureSingle('button');
@@ -254,21 +254,22 @@ async function processSingle(s,cv,full){s.status='processing';renderSingles();co
  const d={box,es,col,crop:cropURL(full,box.map(v=>v*sc0)),...r};d.manual=false;s.det=d;s.status='done';s.ms=Math.round(performance.now()-t);renderSingles()}
 function renderSingles(){const root=$('#singleList');root.innerHTML='';const pct=v=>Math.round(v*100)+'%';
  singles.forEach((s,i)=>{const d=s.det,row=document.createElement('div');row.className='det srow'+(d&&d.manual?' ok':'');
-  if(!d){row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${s.thumb}" class="dthumb"><div class="dmain"><b>Item ${s.n}</b> <span class="tag">${s.status==='processing'?'⏳ recognising…':'🕒 queued'}</span></div><button data-a="del">🗑</button></div>`}
+  if(s.info){row.className='det tinfo';row.innerHTML=`<div class="dhead"><img src="${s.thumb}" class="trayprev"><div class="dmain"><b>${esc(s.info)}</b></div><button data-a="del">🗑</button></div>`}
+  else if(!d){row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${s.thumb}" class="dthumb"><div class="dmain"><b>${s.tray?'Tray capture':'Item '+s.n}</b> <span class="tag">${s.status==='processing'?'⏳ recognising…':'🕒 queued'}</span></div><button data-a="del">🗑</button></div>`}
   else{const sugg=d.manual?d.id:(d.id!=='unknown'?d.id:d.guess),sname=sugg&&sugg!=='unknown'?esc(nameOf(sugg)):NIDB,unk=d.id==='unknown';
    const chips=(d.top3||[]).map(t=>`<button class="chip pick ${t.id===d.id&&d.manual?'on':''}" data-id="${t.id}">${esc(nameOf(t.id))} ${pct(t.s)}</button>`).join('');
-   row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${d.crop}" class="dthumb"><div class="dmain">${d.manual?`<b>Item ${s.n}: ${d.id==='unknown'?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="tag okt">✔ confirmed</span>`:`<b>Item ${s.n}: ${unk?'not sure – maybe':'I think this is'} ${sname}?</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span> <span class="tag ask">needs your OK</span>`}${s.fallback?' <span class="muted small">(no clear item found – used centre of photo)</span>':''}
+   row.innerHTML=`<div class="dhead"><span class="n">${s.n}</span><img src="${d.crop}" class="dthumb"><div class="dmain">${d.manual?`<b>${s.slot?`Slot ${s.slot}`:'Item '+s.n}: ${d.id==='unknown'?'❓ '+NIDB:esc(nameOf(d.id))}</b> <span class="tag okt">✔ confirmed</span>`:`<b>${s.slot?`Slot ${s.slot}`:'Item '+s.n}: ${unk?'not sure – maybe':'I think this is'} ${sname}?</b> <span class="conf ${unk?'low':''}">${pct(d.conf)}</span> <span class="tag ask">needs your OK</span>`}${s.fallback?' <span class="muted small">(no clear item found – used centre of photo)</span>':''}
     <div class="muted small">Top guesses: ${chips||'—'}</div></div></div>
     <div class="acts">${!d.manual&&sugg&&sugg!=='unknown'?`<button data-a="yes" class="primary">✔ Yes, ${sname}</button>`:''}<select class="spick"><option value="">✏️ ${d.manual?'Change':'Something else'}…</option>${items.map(it=>`<option value="${it.id}">${esc(it.name)} · ${inr(it.price)}</option>`).join('')}<option value="__new">➕ New product…</option><option value="unknown">Not in database</option></select><button data-a="del">🗑</button></div>`;
    row.querySelectorAll('.pick').forEach(b=>b.onclick=()=>{setLabel(d,b.dataset.id,false);renderSingles()});
    const yb=row.querySelector('[data-a=yes]');if(yb)yb.onclick=()=>{setLabel(d,sugg,false);renderSingles()};
    row.querySelector('.spick').onchange=async e=>{const v=e.target.value;if(!v)return;if(v==='__new'){await newProductFromCrop(d);renderSingles();return}if(v==='unknown'){d.id='unknown';d.manual=true;renderSingles();return}setLabel(d,v,false);renderSingles()}}
   row.querySelector('[data-a=del]').onclick=()=>{singles.splice(i,1);renderSingles()};root.append(row)});
- const pend=singles.filter(s=>!s.det).length,unc=singles.filter(s=>s.det&&!s.det.manual).length,ok=singles.filter(s=>s.det&&s.det.manual&&s.det.id!=='unknown').length;
- $('#singleInfo').textContent=singles.length?`${singles.length} captured · ${pend} processing · ${unc} waiting for your OK · ${ok} confirmed`:'Nothing captured yet.'}
+ const pend=singles.filter(s=>!s.det&&!s.info).length,unc=singles.filter(s=>s.det&&!s.det.manual).length,ok=singles.filter(s=>s.det&&s.det.manual&&s.det.id!=='unknown').length;
+ const nItems=singles.filter(s=>!s.info).length;$('#singleInfo').textContent=singles.length?`${nItems} item(s) · ${pend} processing · ${unc} waiting for your OK · ${ok} confirmed`:'Nothing captured yet.'}
 $('#sConfirmAll').onclick=()=>{for(const s of singles){const d=s.det;if(!d||d.manual)continue;const g=d.id!=='unknown'?d.id:d.guess;if(g)setLabel(d,g,false)}renderSingles()};
 $('#sClear').onclick=()=>{if(singles.length&&!confirm('Clear the captured list?'))return;singles=[];sN=0;renderSingles()};
-$('#createBill').onclick=async()=>{const b=$('#createBill');if(singles.some(s=>!s.det)){b.disabled=true;b.textContent='⏳ Waiting for processing…';await busy;b.disabled=false;b.textContent='🧾 Create bill'}
+$('#createBill').onclick=async()=>{const b=$('#createBill');if(singles.some(s=>!s.det&&!s.info)){b.disabled=true;b.textContent='⏳ Waiting for processing…';await busy;b.disabled=false;b.textContent='🧾 Create bill'}
  const unc=singles.filter(s=>s.det&&!s.det.manual);if(unc.length&&!confirm(`${unc.length} item(s) are not confirmed yet and will be LEFT OUT of the bill.\nOK = create bill without them · Cancel = go back and confirm`))return;
  const ok=singles.filter(s=>s.det&&s.det.manual&&s.det.id!=='unknown');if(!ok.length){alert('No confirmed items yet.');return}
  for(const s of ok)addToBill(s.det.id,1);singles=singles.filter(s=>!ok.includes(s));renderSingles();$('#billTable').scrollIntoView({behavior:'smooth'});status(`Bill created: ${ok.length} item(s) added`)};
@@ -283,10 +284,55 @@ $('#autoCap').checked=localStorage.getItem('vb_auto')==='1';$('#autoDelay').valu
 $('#autoCap').onchange=()=>{localStorage.setItem('vb_auto',$('#autoCap').checked?1:0);armed=true;stillSince=0;if(!$('#autoCap').checked)badge('')};$('#autoDelay').onchange=()=>localStorage.setItem('vb_autoDelay',$('#autoDelay').value);
 const MOVE=6,SAME=9;window.VB.auto={get emptyRef(){return emptyRef},MOVE,SAME};
 setInterval(()=>{if(!sstream||!$('#autoCap').checked||$('#singleMode').hidden||!det)return;const f=frameSig();if(!f)return;const mv=sdiff(f,prevSig);prevSig=f;const now=performance.now(),need=(+$('#autoDelay').value||2)*1000;
- const isEmpty=emptyRef&&sdiff(f,emptyRef)<SAME;if(isEmpty)lastSig=null;// table cleared: the same product may be placed again (2nd pack)
+ const isEmpty=emptyRef&&sdiff(f,emptyRef)<SAME;if(isEmpty){lastSig=null;lastSlotSigs=[]}// table cleared: the same product may be placed again (2nd pack)
  if(mv>MOVE){stillSince=0;armed=true;badge('👋 Movement…');return}
  if(!stillSince)stillSince=now;if(isEmpty){badge('Empty table – place a product');return}
  if(lastSig&&sdiff(f,lastSig)<SAME){badge('✔ Already captured – place the next product');return}
  if(!armed){badge('Waiting for a change…');return}
  const left=need-(now-stillSince);if(left>0){badge(`Hold still… ${(left/1000).toFixed(1)} s`);return}
  captureSingle('auto');armed=false;stillSince=0;badge(`📸 Captured item ${sN}`)},200);
+
+// ---------- v12: Tray (slots) mode ----------
+let lastSlotSigs=[],lastFrame=null,calPts=[];const grid=()=>{const [r,c]=($('#trayGrid').value||'2x3').split('x').map(Number);return{rows:r,cols:c}};
+$('#trayGrid').value=localStorage.getItem('vb_grid')||'2x3';$('#trayGrid').onchange=()=>{localStorage.setItem('vb_grid',$('#trayGrid').value);lastSlotSigs=[]};
+const calQuad=()=>{try{return JSON.parse(localStorage.getItem('vb_trayQuad')||'null')}catch{return null}};
+function updCalInfo(){const q=calQuad();$('#calClear').hidden=!q;$('#calInfo').textContent=q?'Tapped corners saved – used when the printed markers are not found.':'Printed tray markers are found automatically.'}
+function addTray(cv,full){const s={n:++sN,tray:true,thumb:toCanvas(cv,240).toDataURL('image/jpeg',.8),status:'queued',det:null};singles.push(s);renderSingles();lastFrame=full;queue(()=>processTray(s,full));return s}
+async function processTray(s,full){s.status='processing';renderSingles();const t0=performance.now();const {rows,cols}=grid();
+ const img=full.getContext('2d').getImageData(0,0,full.width,full.height);let quad=null,how='markers';
+ try{const r=TR.findTray(window.AR,img);if(r)quad=r.quad}catch(e){console.warn('aruco',e)}
+ if(!quad){const q=calQuad();if(q){quad=q.map(([x,y])=>[x*full.width,y*full.height]);how='tapped corners'}}
+ const at=singles.indexOf(s);
+ if(!quad){Object.assign(s,{info:'⚠️ Tray not found – make sure all 4 corner markers are in the picture, or use “Tap the 4 corners”.',status:'done'});renderSingles();return}
+ const {W,H}=TR.trayDims(quad,rows,cols);const w=TR.warpQuad(img,quad,W,H);const tc=document.createElement('canvas');tc.width=W;tc.height=H;tc.getContext('2d').putImageData(new ImageData(w.data,W,H),0,0);
+ const rects=TR.slotRects(W,H,rows,cols);const out=[];let empty=0,same=0;const sigs=[];const pv=tc.getContext('2d');
+ for(const [i,[x,y,sw,sh]] of rects.entries()){const sc=document.createElement('canvas');sc.width=Math.round(sw);sc.height=Math.round(sh);sc.getContext('2d').drawImage(tc,x,y,sw,sh,0,0,sc.width,sc.height);
+  const id=sc.getContext('2d').getImageData(0,0,sc.width,sc.height);const fg=TR.slotForeground(id),sig=TR.slotSig(id);sigs[i]=fg.empty?null:sig;
+  if(fg.empty){empty++;continue}if(lastSlotSigs[i]&&sdiff(sig,lastSlotSigs[i])<SAME){same++;continue}
+  const box=fg.box;let vs=viewCanvases(sc,box,1,'fast');let es=await V.embedBatch(fe,vs.map(raw));const col=colOfCanvas(vs[0]);let r=V.decideFused(V.scoreViews(bank,es),cols_(),col,{},thr(),MARGIN);
+  if(r.conf<0.7||r.margin<0.05){es=[...es,...await V.embedBatch(fe,viewCanvases(sc,box,1,'extra').map(raw))];r=V.decideFused(V.scoreViews(bank,es),cols_(),col,{},thr(),MARGIN)}
+  out.push({n:++sN,slot:i+1,status:'done',det:{box,es,col,crop:cropURL(sc,box),manual:false,...r}})}
+ lastSlotSigs=sigs;
+ // annotated preview of the straightened tray
+ pv.lineWidth=4;pv.font='bold 28px sans-serif';rects.forEach(([x,y,sw,sh],i)=>{const o=out.find(e=>e.slot===i+1);pv.strokeStyle=o?'#16a34a':'#9ca3af';pv.strokeRect(x,y,sw,sh);pv.fillStyle=pv.strokeStyle;pv.fillText(String(i+1)+(o?'':' –'),x+8,y+32)});
+ const ms=Math.round(performance.now()-t0);Object.assign(s,{info:`Tray capture #${s.n} (${how}, ${rows}×${cols}): ${out.length} item(s), ${empty} empty${same?`, ${same} unchanged since last capture (skipped)`:''} · ${ms} ms`,thumb:toCanvas(tc,360).toDataURL('image/jpeg',.8),status:'done',ms});
+ singles.splice(singles.indexOf(s)+1,0,...out);renderSingles()}
+const cols_=()=>cols;
+// manual calibration: tap the 4 corners of the slot area (top-left, top-right, bottom-right, bottom-left)
+const CAL=['top-left','top-right','bottom-right','bottom-left'];
+$('#calBtn').onclick=()=>{const src=sv.videoWidth?toCanvas(sv,1280):lastFrame;if(!src){alert('Start the camera (or upload a tray photo) first.');return}
+ const c=$('#calCv');c.width=src.width;c.height=src.height;c.getContext('2d').drawImage(src,0,0);calPts=[];$('#calWrap').hidden=false;$('#calTip').textContent=`Tap the ${CAL[0]} corner of the slot area (corner 1 of 4).`;
+ c.onclick=e=>{const r=c.getBoundingClientRect(),x=(e.clientX-r.left)*c.width/r.width,y=(e.clientY-r.top)*c.height/r.height;calPts.push([x/c.width,y/c.height]);const g=c.getContext('2d');g.fillStyle='#dc2626';g.beginPath();g.arc(x,y,Math.max(6,c.width/120),0,7);g.fill();
+  if(calPts.length<4){$('#calTip').textContent=`Now tap the ${CAL[calPts.length]} corner (${calPts.length+1} of 4).`;return}
+  localStorage.setItem('vb_trayQuad',JSON.stringify(calPts));g.strokeStyle='#16a34a';g.lineWidth=4;g.beginPath();calPts.forEach(([u,v],i)=>i?g.lineTo(u*c.width,v*c.height):g.moveTo(u*c.width,v*c.height));g.closePath();g.stroke();
+  $('#calTip').textContent='✔ Corners saved. Keep the camera and tray in the same place.';c.onclick=null;setTimeout(()=>$('#calWrap').hidden=true,2500);updCalInfo()}};
+$('#calClear').onclick=()=>{localStorage.removeItem('vb_trayQuad');updCalInfo()};window.VB.setCalQuad=q=>{localStorage.setItem('vb_trayQuad',JSON.stringify(q));updCalInfo()};
+// printable tray template (jsPDF): 4 ArUco markers outside the grid corners + thick slot lines
+function trayPDF(paper='A4',rows,cols){({rows,cols}=rows?{rows,cols}:grid());const {jsPDF}=window.jspdf,L=TR.templateLayout(paper),d=new jsPDF({orientation:'landscape',unit:'mm',format:paper.toLowerCase()});
+ const pos=[[L.m,L.m],[L.W-L.m-L.M,L.m],[L.W-L.m-L.M,L.H-L.m-L.M],[L.m,L.H-L.m-L.M]];
+ pos.forEach(([x,y],id)=>{const u=L.M/10,b=TR.markerBits(window.AR,id);d.setFillColor(0,0,0);d.rect(x+u,y+u,8*u,8*u,'F');d.setFillColor(255,255,255);b.forEach((row,yy)=>row.forEach((on,xx)=>{if(on)d.rect(x+(xx+2)*u,y+(yy+2)*u,u,u,'F')}))});
+ const [gx,gy,gw,gh]=L.grid,lw=1.5*(paper==='A3'?1.41:1);d.setFillColor(0,0,0);for(let j=0;j<=cols;j++)d.rect(gx+gw*j/cols-lw/2,gy-lw/2,lw,gh+lw,'F');for(let i=0;i<=rows;i++)d.rect(gx-lw/2,gy+gh*i/rows-lw/2,gw+lw,lw,'F');
+ d.setFontSize(paper==='A3'?11:8);d.setTextColor(90);d.text(`VisionBill tray ${rows}×${cols} (${paper}) – one product per slot · slot 1 is next to this corner ↖ … slots numbered left→right, top→bottom · keep all 4 black corner squares visible`.replace('↖','(top-left)'),L.W/2,L.H-L.m/3,{align:'center'});
+ return d}
+window.VB.trayPDF=(p,r,c)=>trayPDF(p,r,c).output('datauristring');
+$('#trayA4').onclick=()=>trayPDF('A4').save(`visionbill-tray-${$('#trayGrid').value}-A4.pdf`);$('#trayA3').onclick=()=>trayPDF('A3').save(`visionbill-tray-${$('#trayGrid').value}-A3.pdf`);

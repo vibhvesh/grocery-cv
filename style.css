@@ -34,3 +34,5 @@ td input{width:70px}.totals{text-align:right;line-height:2}.totals input{width:7
 .camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#ddd}.badge{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.65);color:#fff;padding:6px 12px;border-radius:20px;font-weight:600}
 .bigsnap{display:block;width:100%;min-height:96px;font-size:2rem;font-weight:800;margin:12px 0;border-radius:18px;background:#16a34a;color:#fff;border:0;box-shadow:0 4px 0 #0f7a37}.bigsnap:disabled{background:#9ca3af;box-shadow:none}.bigsnap.flash{background:#fff;color:#16a34a}
 button.big{font-size:1.1rem;padding:12px 22px}.srow.ok{border-left:4px solid #16a34a}.tag.okt{color:#15803d}.spick{max-width:220px}.guide{color:#fff;margin-right:10px;text-decoration:none;font-weight:600}
+.trayprev{width:180px;border-radius:8px}.tinfo{background:#f8fafc}
+#calCv{width:100%;height:auto;display:block;cursor:crosshair;touch-action:manipulation}

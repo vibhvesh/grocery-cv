@@ -1,10 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisionBill – Grocery CV Billing</title>
-<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=11">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css?v=12">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head><body>
-<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v11</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><a class="guide" href="guide.html" target="_blank">📖 Guide</a><span id="status" class="pill">Loading models…</span></header>
+<header><h1>🛒 VisionBill <small style="font-size:.6em;opacity:.7">v12</small></h1><nav><button data-tab="setup" class="active">Products</button><button data-tab="bill">Billing</button></nav><a class="guide" href="guide.html" target="_blank">📖 Guide</a><span id="status" class="pill">Loading models…</span></header>
 <main>
 <section id="setup" class="tab active">
  <div class="card samples"><div class="row between"><div><b>New here?</b> Load 8 demo grocery products (with training photos) in one tap.</div><button id="samplesBtn" class="primary">📦 Load sample products</button></div><div id="samplesInfo" class="muted"></div>
@@ -23,9 +23,14 @@
 </section>
 <section id="bill" class="tab">
  <div class="card"><h2>Scan items</h2>
-  <div class="row modes"><label class="chk"><input type="radio" name="mode" value="single" id="modeSingle"> <b>One at a time</b> (best accuracy)</label><label class="chk"><input type="radio" name="mode" value="multi" id="modeMulti"> Many items in one photo</label></div>
+  <div class="row modes"><label class="chk"><input type="radio" name="mode" value="single" id="modeSingle"> <b>One at a time</b> (best accuracy)</label><label class="chk"><input type="radio" name="mode" value="tray" id="modeTray"> <b>Tray (slots)</b></label><label class="chk"><input type="radio" name="mode" value="multi" id="modeMulti"> Many items in one photo</label></div>
   <div id="singleMode" hidden>
-   <p class="tip">Put <b>one product</b> on a plain table, tap the big button (or turn on Auto-capture), then swap in the next product. Processing runs in the background.</p>
+   <p class="tip" id="singleTip">Put <b>one product</b> on a plain table, tap the big button (or turn on Auto-capture), then swap in the next product. Processing runs in the background.</p>
+   <div id="trayOpts" class="card inner" hidden><b>Tray setup</b> – print the tray (or mark an area with tape), put one product in each slot, capture once.
+    <div class="row"><label>Grid <select id="trayGrid"><option value="2x3">2 rows × 3 (6 slots)</option><option value="2x2">2 × 2 (4 slots)</option><option value="3x3">3 × 3 (9 slots)</option><option value="3x2">3 rows × 2 (6 slots)</option></select></label>
+     <button id="trayA4">🖨️ Print tray A4</button><button id="trayA3">🖨️ Print tray A3</button><span class="muted small">ready-made 2×3: <a href="tray_A3_2x3.pdf" target="_blank">A3</a> · <a href="tray_A4_2x3.pdf" target="_blank">A4</a></span></div>
+    <div class="row"><button id="calBtn">📐 No markers? Tap the 4 corners</button><button id="calClear" hidden>Forget tapped corners</button><span class="muted small" id="calInfo"></span></div>
+    <div id="calWrap" hidden><p class="tip" id="calTip"></p><canvas id="calCv" class="prev"></canvas></div></div>
    <div class="camwrap"><video id="scam" playsinline muted autoplay></video><div id="autoBadge" class="badge" hidden></div><div id="camOff" class="camoff">Camera is off – tap “Start camera”</div></div>
    <button id="bigSnap" class="bigsnap" disabled>📸 CAPTURE</button>
    <div class="row"><button id="scamBtn" class="primary">🎥 Start camera</button><label class="chk"><input type="checkbox" id="autoCap"> Auto-capture</label><label>when still for <input id="autoDelay" type="number" min="0.5" max="10" step="0.5" value="2" style="width:64px"> s</label><button id="emptyBtn" title="Point the camera at the empty table and tap">Learn empty table</button><label class="btn">🖼️ Photo(s)<input id="singlePhotos" type="file" accept="image/*" multiple hidden></label></div>
@@ -57,4 +62,5 @@
   <div class="row np"><button onclick="window.print()">🖨️ Print</button><button id="pdfBtn" class="primary">⬇️ PDF</button><button id="clearBill">Clear bill</button></div>
  </div>
 </section></main>
-<script type="module" src="app.js?v=11"></script></body></html>
+<script src="lib/cv.js?v=12"></script><script src="lib/aruco.js?v=12"></script>
+<script type="module" src="app.js?v=12"></script></body></html>
